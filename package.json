@@ -4,13 +4,13 @@
   "description": "main brains for decaptcha",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/decaptcha/backend.git"
   },
-  "author": "Decaptcha-Devs",
+  "author": "Decaptcha-Devs (https://github.com/decaptcha)",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/decaptcha/backend/issues"
