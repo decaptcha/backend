@@ -1,0 +1,26 @@
+{
+  "name": "decaptcha-backend",
+  "version": "1.0.0",
+  "description": "main brains for decaptcha",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/decaptcha/backend.git"
+  },
+  "author": "Decaptcha-Devs",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/decaptcha/backend/issues"
+  },
+  "homepage": "https://github.com/decaptcha/backend#readme",
+  "dependencies": {
+    "body-parser": "^1.20.2",
+    "express": "^4.18.2",
+    "express-fileupload": "^1.4.0",
+    "morgan": "^1.10.0",
+    "pg": "^8.9.0"
+  }
+}
