@@ -2,6 +2,7 @@ const express = require("express");
 const fileUpload = require("express-fileupload");
 const bodyParser = require("body-parser");
 const morgan = require("morgan");
+const cors = require("cors");
 
 const crypto = require("crypto");
 
@@ -34,6 +35,7 @@ app.use(
     limits: { fileSize: 50 * 1024 * 1024 },
   })
 );
+app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(morgan("dev"));
