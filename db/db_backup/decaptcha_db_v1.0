@@ -1,0 +1,725 @@
+--
+-- PostgreSQL database cluster dump
+--
+
+-- Started on 2023-03-05 13:46:15 IST
+
+SET default_transaction_read_only = off;
+
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+
+--
+-- Roles
+--
+
+CREATE ROLE postgres;
+ALTER ROLE postgres WITH SUPERUSER INHERIT NOCREATEROLE NOCREATEDB LOGIN NOREPLICATION NOBYPASSRLS;
+CREATE ROLE pranav;
+ALTER ROLE pranav WITH SUPERUSER INHERIT CREATEROLE CREATEDB LOGIN REPLICATION BYPASSRLS;
+
+--
+-- User Configurations
+--
+
+
+
+
+
+
+--
+-- Databases
+--
+
+--
+-- Database "template1" dump
+--
+
+\connect template1
+
+--
+-- PostgreSQL database dump
+--
+
+-- Dumped from database version 14.6 (Homebrew)
+-- Dumped by pg_dump version 15.1
+
+-- Started on 2023-03-05 13:46:15 IST
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- TOC entry 4 (class 2615 OID 2200)
+-- Name: public; Type: SCHEMA; Schema: -; Owner: pranav
+--
+
+-- *not* creating schema, since initdb creates it
+
+
+ALTER SCHEMA public OWNER TO pranav;
+
+--
+-- TOC entry 3591 (class 0 OID 0)
+-- Dependencies: 4
+-- Name: SCHEMA public; Type: ACL; Schema: -; Owner: pranav
+--
+
+REVOKE USAGE ON SCHEMA public FROM PUBLIC;
+GRANT ALL ON SCHEMA public TO PUBLIC;
+
+
+-- Completed on 2023-03-05 13:46:15 IST
+
+--
+-- PostgreSQL database dump complete
+--
+
+--
+-- Database "postgres" dump
+--
+
+\connect postgres
+
+--
+-- PostgreSQL database dump
+--
+
+-- Dumped from database version 14.6 (Homebrew)
+-- Dumped by pg_dump version 15.1
+
+-- Started on 2023-03-05 13:46:15 IST
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- TOC entry 5 (class 2615 OID 2200)
+-- Name: public; Type: SCHEMA; Schema: -; Owner: pranav
+--
+
+-- *not* creating schema, since initdb creates it
+
+
+ALTER SCHEMA public OWNER TO pranav;
+
+--
+-- TOC entry 2 (class 3079 OID 16470)
+-- Name: uuid-ossp; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
+
+
+--
+-- TOC entry 3663 (class 0 OID 0)
+-- Dependencies: 2
+-- Name: EXTENSION "uuid-ossp"; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION "uuid-ossp" IS 'generate universally unique identifiers (UUIDs)';
+
+
+--
+-- TOC entry 241 (class 1255 OID 16531)
+-- Name: get_captcha(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.get_captcha() RETURNS json
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+current_random_project_id uuid;
+labelled_images_limit int;
+unlabelled_images_limit int;
+current_project_labelled_images json;
+current_project_unlabelled_images json;
+other_project_images json;
+response json;
+
+BEGIN
+	-- select a random active project
+	SELECT 
+		id INTO current_random_project_id 
+	FROM 
+		projects 
+	WHERE 
+		active = true
+	ORDER BY 
+		random() 
+	LIMIT 1;
+
+	-- set limits for labelled_images_limit
+	SELECT floor(random() * (2+1) + 2)::int INTO labelled_images_limit;
+	-- unlabelled_images_limit will (6 - labelled_images_limit)
+	SELECT (6 - labelled_images_limit) INTO unlabelled_images_limit;
+
+	-- select labelled_images_limit number of images that will be used for auth
+	SELECT 
+		json_agg(t) INTO current_project_labelled_images
+	FROM (
+		SELECT 
+			id, name, url
+		FROM 
+			images 
+		WHERE 
+			active = true
+			AND
+			labelled = true
+			AND
+			project_id = current_random_project_id
+		ORDER BY 
+			random() 
+		LIMIT labelled_images_limit
+	) as t;
+
+	-- select unlabelled_images_limit number of images that will be used for labelling info from users
+	SELECT 
+		json_agg(t) INTO current_project_unlabelled_images
+	FROM (
+		SELECT 
+			id, name, url
+		FROM 
+			images 
+		WHERE 
+			active = true
+			AND
+			labelled = false
+			AND
+			project_id = current_random_project_id
+		ORDER BY 
+			random() 
+		LIMIT unlabelled_images_limit
+	) as t;
+
+	-- select 6 random images from other projects
+	SELECT 
+		json_agg(t) INTO other_project_images
+	FROM (
+		SELECT 
+			id, name, url
+		FROM 
+			images 
+		WHERE 
+			active = true
+			AND
+			project_id in (SELECT id FROM projects WHERE active = true AND project_id = current_random_project_id ORDER BY random())
+		ORDER BY 
+			random() 
+		LIMIT 6 -- this is harcoded 6
+	) as t;
+
+	SELECT 
+		to_json(t) INTO response 
+	FROM (
+		SELECT 
+			current_project_labelled_images,
+			current_project_unlabelled_images,
+			other_project_images
+	) as t;
+
+	RETURN response;
+END;
+$$;
+
+
+ALTER FUNCTION public.get_captcha() OWNER TO postgres;
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- TOC entry 217 (class 1259 OID 16442)
+-- Name: api_keys; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.api_keys (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id integer NOT NULL,
+    api_key text NOT NULL,
+    usage bigint NOT NULL,
+    active boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone
+);
+
+
+ALTER TABLE public.api_keys OWNER TO postgres;
+
+--
+-- TOC entry 216 (class 1259 OID 16441)
+-- Name: api_keys_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.api_keys_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.api_keys_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 3664 (class 0 OID 0)
+-- Dependencies: 216
+-- Name: api_keys_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.api_keys_id_seq OWNED BY public.api_keys.id;
+
+
+--
+-- TOC entry 215 (class 1259 OID 16422)
+-- Name: images; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.images (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id integer NOT NULL,
+    project_id uuid NOT NULL,
+    labelled boolean NOT NULL,
+    shown_to_users bigint NOT NULL,
+    clicks bigint NOT NULL,
+    url text NOT NULL,
+    size text,
+    active boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    name text NOT NULL
+);
+
+
+ALTER TABLE public.images OWNER TO postgres;
+
+--
+-- TOC entry 214 (class 1259 OID 16421)
+-- Name: images_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.images_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.images_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 3665 (class 0 OID 0)
+-- Dependencies: 214
+-- Name: images_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.images_id_seq OWNED BY public.images.id;
+
+
+--
+-- TOC entry 213 (class 1259 OID 16407)
+-- Name: projects; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.projects (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id integer NOT NULL,
+    name text NOT NULL,
+    label_value text NOT NULL,
+    active boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    threshold numeric
+);
+
+
+ALTER TABLE public.projects OWNER TO postgres;
+
+--
+-- TOC entry 212 (class 1259 OID 16406)
+-- Name: projects_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.projects_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.projects_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 3666 (class 0 OID 0)
+-- Dependencies: 212
+-- Name: projects_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.projects_id_seq OWNED BY public.projects.id;
+
+
+--
+-- TOC entry 219 (class 1259 OID 16457)
+-- Name: user_type; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.user_type (
+    id integer NOT NULL,
+    description text,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone
+);
+
+
+ALTER TABLE public.user_type OWNER TO postgres;
+
+--
+-- TOC entry 218 (class 1259 OID 16456)
+-- Name: user_type_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.user_type_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.user_type_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 3667 (class 0 OID 0)
+-- Dependencies: 218
+-- Name: user_type_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.user_type_id_seq OWNED BY public.user_type.id;
+
+
+--
+-- TOC entry 211 (class 1259 OID 16394)
+-- Name: users; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.users (
+    id integer NOT NULL,
+    user_type_id integer NOT NULL,
+    group_id integer,
+    name text,
+    api_key text NOT NULL,
+    active boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone
+);
+
+
+ALTER TABLE public.users OWNER TO postgres;
+
+--
+-- TOC entry 210 (class 1259 OID 16393)
+-- Name: users_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.users_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.users_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 3668 (class 0 OID 0)
+-- Dependencies: 210
+-- Name: users_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.users_id_seq OWNED BY public.users.id;
+
+
+--
+-- TOC entry 3492 (class 2604 OID 16460)
+-- Name: user_type id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_type ALTER COLUMN id SET DEFAULT nextval('public.user_type_id_seq'::regclass);
+
+
+--
+-- TOC entry 3484 (class 2604 OID 16397)
+-- Name: users id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_id_seq'::regclass);
+
+
+--
+-- TOC entry 3654 (class 0 OID 16442)
+-- Dependencies: 217
+-- Data for Name: api_keys; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.api_keys (id, user_id, api_key, usage, active, created_at, updated_at) FROM stdin;
+2b78fcd3-6d97-4274-9321-6f0e86df8db9	1	920310e1-eb98-4cbf-bfa1-97c90e8baf44	0	t	2023-03-05 11:40:52.956874+05:30	2023-03-05 11:40:52.956874+05:30
+a6d20263-f1e9-4b14-b29b-ed54cf993643	2	b8a09ee5-3136-4123-ad69-fec102ebe66d	0	t	2023-03-05 11:40:52.956874+05:30	2023-03-05 11:40:52.956874+05:30
+bc22e740-d46d-4c36-8d99-5d1cc2b2a713	3	fe09270c-d902-4915-8282-53397f2953de	0	t	2023-03-05 11:40:52.956874+05:30	2023-03-05 11:40:52.956874+05:30
+de2e1d0f-f73e-4e25-83cf-c188f4bc12b4	4	404fd64c-f61b-4bbc-82bb-ac5a8b5c5a58	0	t	2023-03-05 11:40:52.956874+05:30	2023-03-05 11:40:52.956874+05:30
+\.
+
+
+--
+-- TOC entry 3652 (class 0 OID 16422)
+-- Dependencies: 215
+-- Data for Name: images; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.images (id, user_id, project_id, labelled, shown_to_users, clicks, url, size, active, created_at, updated_at, name) FROM stdin;
+be47683e-e76b-4aba-93e7-e1b559a0bf14	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	t	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/image-1.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-1.jpg
+eadea483-ddc1-4d5f-943c-4bd6f7ff369a	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	t	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/image-2.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-2.jpg
+59cdebf4-4069-4d3f-8aa5-81db29963393	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	t	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/image-3.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-3.jpg
+bb839863-7e7c-4b05-91e1-a7c4208436be	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	t	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/image-4.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-4.jpg
+ea81561f-8ad6-4ae8-848f-f19aaec5492e	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	t	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/image-5.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-5.jpg
+bafe28e3-ab09-48c9-99f1-8fb6b6c748c9	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	f	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/unlabelled/image-6.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-6.jpg
+870b5e49-6d3f-4f8a-bee1-b8bcb117dcd1	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	f	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/unlabelled/image-7.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-7.jpg
+dd5daab9-b529-4f5a-9f0b-af41b6e42de4	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	f	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/unlabelled/image-8.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-8.jpg
+72d54dba-fb36-4d25-8e1b-0792c1fe9e2c	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	f	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/unlabelled/image-9.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-9.jpg
+94a31df3-d8f3-45c8-b6b9-c49537680986	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	f	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/unlabelled/image-10.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-10.jpg
+515efac9-0466-4b1f-9ed0-668aaab60879	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	f	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/unlabelled/image-11.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-11.jpg
+7ea0c790-3f80-4061-a833-6ac609f113cd	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	f	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/unlabelled/image-12.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-12.jpg
+0df0664f-f6df-4f0a-b213-58d88c593372	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	t	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/labelled/image-1.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-1.jpg
+66d16ce5-3760-4585-9c6f-1dc37b5280b5	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	t	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/labelled/image-2.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-2.jpg
+d5a23d01-89c6-4303-9167-340215496496	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	t	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/labelled/image-3.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-3.jpg
+26ea0aaa-dc4f-4117-ac2f-62691b6670ec	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	t	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/labelled/image-4.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-4.jpg
+0bdd1e49-dd11-4c32-baf3-ee7b0042df7e	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	t	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/labelled/image-5.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-5.jpg
+54353b9e-011f-4e39-b569-6d6606cca21a	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	f	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/unlabelled/image-6.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-6.jpg
+b2df19de-b7ee-43b2-aa8d-9e45c4988506	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	f	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/unlabelled/image-7.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-7.jpg
+bb798e7b-06a7-406d-bbae-8f8deddb3a18	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	f	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/unlabelled/image-8.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-8.jpg
+d858caff-70f4-419e-b5d8-585dfb06e2ef	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	f	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/unlabelled/image-9.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-9.jpg
+a55ac320-14c2-4cad-b29c-5e0d3200cd8a	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	f	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/unlabelled/image-10.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-10.jpg
+6870ec3d-9826-46df-9ae8-e6d8942e13dd	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	f	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/unlabelled/image-11.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-11.jpg
+473497ab-f7fd-423d-9528-d0d3f0556fa4	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	f	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/unlabelled/image-12.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-12.jpg
+\.
+
+
+--
+-- TOC entry 3650 (class 0 OID 16407)
+-- Dependencies: 213
+-- Data for Name: projects; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.projects (id, user_id, name, label_value, active, created_at, updated_at, threshold) FROM stdin;
+f872702d-b67f-4b5f-89af-b7264a89bfa8	1	bus	bus	t	2023-03-05 11:45:55.476424+05:30	2023-03-05 11:45:55.476424+05:30	85
+cf6d40a6-2715-4999-99c0-44b1dfba6be9	1	bicycle	bicycle	t	2023-03-05 11:53:41.855287+05:30	2023-03-05 11:53:41.855287+05:30	85
+\.
+
+
+--
+-- TOC entry 3656 (class 0 OID 16457)
+-- Dependencies: 219
+-- Data for Name: user_type; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.user_type (id, description, created_at, updated_at) FROM stdin;
+1	Admin	2023-03-04 20:14:16.998408+05:30	2023-03-04 20:14:16.998408+05:30
+2	User	2023-03-04 20:31:33.020414+05:30	2023-03-04 20:31:33.020414+05:30
+\.
+
+
+--
+-- TOC entry 3648 (class 0 OID 16394)
+-- Dependencies: 211
+-- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.users (id, user_type_id, group_id, name, api_key, active, created_at, updated_at) FROM stdin;
+1	2	1	pranav	920310e1-eb98-4cbf-bfa1-97c90e8baf44	t	2023-03-05 11:35:19.303184+05:30	2023-03-05 11:35:19.303184+05:30
+2	2	1	roshan_op	b8a09ee5-3136-4123-ad69-fec102ebe66d	t	2023-03-05 11:35:43.9687+05:30	2023-03-05 11:35:43.9687+05:30
+3	2	1	aditya_op	fe09270c-d902-4915-8282-53397f2953de	t	2023-03-05 11:35:56.082811+05:30	2023-03-05 11:35:56.082811+05:30
+4	2	1	archish_op	404fd64c-f61b-4bbc-82bb-ac5a8b5c5a58	t	2023-03-05 11:36:08.387204+05:30	2023-03-05 11:36:08.387204+05:30
+\.
+
+
+--
+-- TOC entry 3669 (class 0 OID 0)
+-- Dependencies: 216
+-- Name: api_keys_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.api_keys_id_seq', 1, false);
+
+
+--
+-- TOC entry 3670 (class 0 OID 0)
+-- Dependencies: 214
+-- Name: images_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.images_id_seq', 1, false);
+
+
+--
+-- TOC entry 3671 (class 0 OID 0)
+-- Dependencies: 212
+-- Name: projects_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.projects_id_seq', 1, false);
+
+
+--
+-- TOC entry 3672 (class 0 OID 0)
+-- Dependencies: 218
+-- Name: user_type_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.user_type_id_seq', 1, false);
+
+
+--
+-- TOC entry 3673 (class 0 OID 0)
+-- Dependencies: 210
+-- Name: users_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.users_id_seq', 1, false);
+
+
+--
+-- TOC entry 3500 (class 2606 OID 16482)
+-- Name: api_keys api_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.api_keys
+    ADD CONSTRAINT api_keys_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 3498 (class 2606 OID 16490)
+-- Name: images images_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.images
+    ADD CONSTRAINT images_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 3496 (class 2606 OID 16502)
+-- Name: projects projects_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 3502 (class 2606 OID 16464)
+-- Name: user_type user_type_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_type
+    ADD CONSTRAINT user_type_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 3494 (class 2606 OID 16402)
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 3505 (class 2606 OID 16518)
+-- Name: images project_id; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.images
+    ADD CONSTRAINT project_id FOREIGN KEY (project_id) REFERENCES public.projects(id) NOT VALID;
+
+
+--
+-- TOC entry 3504 (class 2606 OID 16416)
+-- Name: projects user_id; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT user_id FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- TOC entry 3506 (class 2606 OID 16431)
+-- Name: images user_id; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.images
+    ADD CONSTRAINT user_id FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- TOC entry 3507 (class 2606 OID 16451)
+-- Name: api_keys user_id; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.api_keys
+    ADD CONSTRAINT user_id FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- TOC entry 3503 (class 2606 OID 16465)
+-- Name: users user_type_id; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT user_type_id FOREIGN KEY (user_type_id) REFERENCES public.user_type(id) NOT VALID;
+
+
+--
+-- TOC entry 3662 (class 0 OID 0)
+-- Dependencies: 5
+-- Name: SCHEMA public; Type: ACL; Schema: -; Owner: pranav
+--
+
+REVOKE USAGE ON SCHEMA public FROM PUBLIC;
+GRANT ALL ON SCHEMA public TO PUBLIC;
+
+
+-- Completed on 2023-03-05 13:46:15 IST
+
+--
+-- PostgreSQL database dump complete
+--
+
+-- Completed on 2023-03-05 13:46:15 IST
+
+--
+-- PostgreSQL database cluster dump complete
+--
+
