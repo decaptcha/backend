@@ -10,17 +10,17 @@ const utils = require("./utils");
 const DB_FUNCTIONS = require("./db/functions");
 
 const {
-  port,
+  server_port,
   storageRootFolder,
   SUCCESS_HTTP_CODE,
   SERVER_ERROR_CODE,
   BAD_REQ_ERROR_CODE,
+  NOT_FOUND_CODE,
   INCORRECT_RESULT_FROM_DB,
+  QUERY_PARAM_NOT_PRESENT,
+  IMG_NOT_PRESENT,
   SUCCESS_RESPONSE,
   ERROR_RESPONSE,
-  PRIVATE_KEY,
-  ENC_ALGO,
-  INITIALIZATION_VECTOR,
 } = require("./constants");
 
 const app = express();
@@ -72,7 +72,7 @@ app.get("/captcha", (req, res) => {
           DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
         ]["current_project_labelled_images"]) {
           resp.push({
-            url: img.url,
+            url: utils.getImgURL(img.url),
             id: utils.encryptValue(
               `${crypto.randomInt(10000, 99999)}:cpli:${img.id}`
             ),
@@ -83,7 +83,7 @@ app.get("/captcha", (req, res) => {
           DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
         ]["current_project_unlabelled_images"]) {
           resp.push({
-            url: img.url,
+            url: utils.getImgURL(img.url),
             id: utils.encryptValue(
               `${crypto.randomInt(10000, 99999)}:cpui:${img.id}`
             ),
@@ -94,7 +94,7 @@ app.get("/captcha", (req, res) => {
           DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
         ]["other_project_images"]) {
           resp.push({
-            url: img.url,
+            url: utils.getImgURL(img.url),
             id: utils.encryptValue(
               `${crypto.randomInt(10000, 99999)}:opi:${img.id}`
             ),
@@ -107,7 +107,6 @@ app.get("/captcha", (req, res) => {
       res.status(SUCCESS_HTTP_CODE).json({ ...SUCCESS_RESPONSE, resp });
     });
   } catch (e) {
-    console.log("here3");
     res.status(SERVER_ERROR_CODE).json({
       ...ERROR_RESPONSE,
       resp: utils.getAndPrintErrorString(req.url, e),
@@ -163,6 +162,34 @@ app.put("/upload_images/:project_id", (req, res) => {
   res.sendStatus(501);
 });
 
-app.listen(port, () => {
-  console.log(`decaptcha backend server initialized on port ${port}`);
+/**
+ * API to serve image files
+ * RequstBody: {}
+ * Response: {}
+ */
+app.get("/image", (req, res) => {
+  let code;
+  try {
+    if (req && req.query && req.query.image_path) {
+      const image_path = req.query.image_path;
+      if (utils.isImgPresent(image_path)) {
+        res.status(SUCCESS_HTTP_CODE).sendFile(utils.getImgPath(image_path));
+      } else {
+        code = NOT_FOUND_CODE;
+        throw IMG_NOT_PRESENT;
+      }
+    } else {
+      code = BAD_REQ_ERROR_CODE;
+      throw QUERY_PARAM_NOT_PRESENT;
+    }
+  } catch (e) {
+    res.status(code || SERVER_ERROR_CODE).json({
+      ...ERROR_RESPONSE,
+      resp: utils.getAndPrintErrorString(req.url, e),
+    });
+  }
+});
+
+app.listen(server_port, () => {
+  console.log(`decaptcha backend server initialized on port ${server_port}`);
 });

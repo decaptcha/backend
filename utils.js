@@ -1,6 +1,16 @@
 const Pool = require("pg").Pool;
 const crypto = require("crypto");
-const { PRIVATE_KEY, ENC_ALGO, INITIALIZATION_VECTOR } = require("./constants");
+const util = require("util");
+const fs = require("fs");
+const path = require("path");
+const {
+  storageRootFolder,
+  server_port,
+  DB_CONFIG,
+  PRIVATE_KEY,
+  ENC_ALGO,
+  INITIALIZATION_VECTOR,
+} = require("./constants");
 
 /**
  * Returns a formatted error string
@@ -50,18 +60,56 @@ const decryptValue = (
   return decipher.update(value, "hex", "utf8") + decipher.final("utf8");
 };
 
-const connectToDB = () =>
-  new Pool({
-    user: "postgres",
-    host: "localhost",
-    database: "",
-    password: "",
-    port: 5432,
-  });
+/**
+ * connects to the postgres DB
+ * @returns pg Pool object
+ */
+const connectToDB = () => new Pool(DB_CONFIG);
+
+/**
+ * Returns a formated image string
+ * @param {string} url
+ * @returns string
+ */
+const getImgURL = (url) => {
+  if (url && typeof url === "string") {
+    if (url.startsWith("file://")) {
+      // file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/image-1.jpg
+      url = url.replace(
+        "file://",
+        `http://localhost:${server_port}/image/?image_path=`
+      );
+    } else if (url.startsWith("s3://")) {
+      // TODO: handle s3 urls here
+    }
+  }
+  return url;
+};
+
+/**
+ * Checks if the image is present or not
+ * @param {string} image_path
+ * @returns boolean
+ */
+const isImgPresent = (image_path) => {
+  return fs.existsSync(path.join(storageRootFolder, image_path));
+};
+
+/**
+ * Returns a complete path from storageRootFolder
+ * @param {string} image_path
+ * @returns string
+ */
+const getImgPath = (image_path) => {
+  return path.join(storageRootFolder, image_path);
+};
 
 module.exports = {
   getAndPrintErrorString,
   encryptValue,
   decryptValue,
   connectToDB,
+  getImgURL,
+  isImgPresent,
+  getImgPath,
 };
