@@ -5,6 +5,8 @@ const morgan = require("morgan");
 const Pool = require("pg").Pool;
 const path = require("path");
 
+const DB_FUNCTIONS = require("./db/functions");
+
 const port = 3690;
 const storageRootFolder = path.join(__dirname, "./storage");
 const SUCCESS_HTTP_CODE = 200;
@@ -22,6 +24,7 @@ const errorResponse = {
 };
 
 const app = express();
+// add middlewares to express server
 app.use(
   fileUpload({
     useTempFiles: true,
@@ -65,7 +68,21 @@ app.get("/", (req, res) => {
  * Response: {}
  */
 app.get("/captcha", (req, res) => {
-  res.sendStatus(501);
+  try {
+    pool.query(DB_FUNCTIONS.GET_CATPCHA, (e, results) => {
+      if (e) {
+        throw e;
+      }
+
+      res
+        .status(SUCCESS_HTTP_CODE)
+        .json({ ...successResponse, resp: results.rows });
+    });
+  } catch (e) {
+    res
+      .status(SERVER_ERROR_CODE)
+      .json({ ...errorResponse, resp: getAndPrintErrorString(req.url, e) });
+  }
 });
 
 /**
