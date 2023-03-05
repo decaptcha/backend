@@ -2,6 +2,7 @@ const express = require("express");
 const fileUpload = require("express-fileupload");
 const bodyParser = require("body-parser");
 const morgan = require("morgan");
+const Pool = require("pg").Pool;
 const path = require("path");
 
 const port = 3690;
@@ -32,6 +33,15 @@ app.use(
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(morgan("dev"));
+
+// connect to the DB
+const pool = new Pool({
+  user: "postgres",
+  host: "localhost",
+  database: "",
+  password: "",
+  port: 5432,
+});
 
 const getAndPrintErrorString = (url, error) => {
   const errorString = `Exception occurred at ${url}, Details \n ${util.inspect(
