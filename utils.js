@@ -104,6 +104,31 @@ const getImgPath = (image_path) => {
   return path.join(storageRootFolder, image_path);
 };
 
+/**
+ * Shuffles all the items of an array
+ * @param {Array[string]} array - array that needs to be shuffled
+ * @returns Array[string]
+ */
+const shuffleArray = (array) => {
+  let currentIndex = array.length,
+    randomIndex;
+
+  // While there remain elements to shuffle.
+  while (currentIndex != 0) {
+    // Pick a remaining element.
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex--;
+
+    // And swap it with the current element.
+    [array[currentIndex], array[randomIndex]] = [
+      array[randomIndex],
+      array[currentIndex],
+    ];
+  }
+
+  return array;
+};
+
 module.exports = {
   getAndPrintErrorString,
   encryptValue,
@@ -112,4 +137,5 @@ module.exports = {
   getImgURL,
   isImgPresent,
   getImgPath,
+  shuffleArray,
 };

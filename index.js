@@ -60,7 +60,7 @@ app.get("/captcha", (req, res) => {
         throw e;
       }
 
-      const resp = [];
+      let resp = [];
 
       if (
         results &&
@@ -103,6 +103,8 @@ app.get("/captcha", (req, res) => {
       } else {
         throw INCORRECT_RESULT_FROM_DB;
       }
+
+      resp = utils.shuffleArray(resp);
 
       res.status(SUCCESS_HTTP_CODE).json({ ...SUCCESS_RESPONSE, resp });
     });
