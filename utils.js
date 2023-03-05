@@ -129,6 +129,22 @@ const shuffleArray = (array) => {
   return array;
 };
 
+/**
+ * Validates the DB Response
+ * @param {string} response - db response object
+ * @param {string} functionName - name of the db function used
+ * @returns boolean
+ */
+const validateDBResponse = (response, functionName) => {
+  return (
+    response &&
+    response.rows &&
+    response.rows.length === 1 &&
+    response.rows[0] &&
+    response.rows[0][functionName]
+  );
+};
+
 module.exports = {
   getAndPrintErrorString,
   encryptValue,
@@ -138,4 +154,5 @@ module.exports = {
   isImgPresent,
   getImgPath,
   shuffleArray,
+  validateDBResponse,
 };

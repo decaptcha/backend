@@ -19,6 +19,7 @@ const {
   INCORRECT_RESULT_FROM_DB,
   QUERY_PARAM_NOT_PRESENT,
   IMG_NOT_PRESENT,
+  REQUEST_BODY_NOT_PRESENT,
   SUCCESS_RESPONSE,
   ERROR_RESPONSE,
 } = require("./constants");
@@ -63,10 +64,10 @@ app.get("/captcha", (req, res) => {
       let resp = [];
 
       if (
-        results &&
-        results.rows &&
-        results.rows.length === 1 &&
-        results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]
+        utils.validateDBResponse(
+          results,
+          DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
+        )
       ) {
         for (const img of results.rows[0][
           DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
@@ -123,7 +124,81 @@ app.get("/captcha", (req, res) => {
  * Response: {}
  */
 app.post("/captcha", (req, res) => {
-  res.sendStatus(501);
+  let code;
+  try {
+    if (req && req.body) {
+      let images = req.body;
+      let humanCheckPassed = true;
+      const labelledImages = [];
+      const unlabelledImages = [];
+
+      // segregate images into correct arrays
+      for (const img of images) {
+        if (img && img.id) {
+          const decryptedId = utils.decryptValue(img.id);
+          if (decryptedId) {
+            decryptedIdSplit = decryptedId.split(":");
+            if (!decryptedIdSplit || decryptedIdSplit.length !== 3) {
+              console.log(
+                `Invalid decryptedId found: ${decryptedId}. Request Body: ${images}`
+              );
+              continue;
+            }
+
+            img.id = decryptedId.split(":")[2];
+            if (decryptedId.includes("cpli")) {
+              labelledImages.push(img);
+            } else if (decryptedId.includes("cpui")) {
+              unlabelledImages.push(img);
+            }
+          }
+        }
+      }
+
+      // Check if user has passed the human check
+      if (labelledImages && labelledImages.length > 0) {
+        for (const img of labelledImages) {
+          if (!img.selected) {
+            humanCheckPassed = false;
+            break;
+          }
+        }
+      }
+
+      // Update data in DB for unlabelled images
+      pool.query(
+        DB_FUNCTIONS.POST_CATPCHA.QUERY,
+        [JSON.stringify(unlabelledImages)],
+        (e, results) => {
+          if (e) {
+            throw e;
+          }
+
+          if (
+            utils.validateDBResponse(
+              results,
+              DB_FUNCTIONS.POST_CATPCHA.FUNCTION_NAME
+            )
+          ) {
+            res.status(SUCCESS_HTTP_CODE).json({
+              ...SUCCESS_RESPONSE,
+              resp: results.rows[0][DB_FUNCTIONS.POST_CATPCHA.FUNCTION_NAME],
+            });
+          } else {
+            throw INCORRECT_RESULT_FROM_DB;
+          }
+        }
+      );
+    } else {
+      code = BAD_REQ_ERROR_CODE;
+      throw REQUEST_BODY_NOT_PRESENT;
+    }
+  } catch (e) {
+    res.status(code || SERVER_ERROR_CODE).json({
+      ...ERROR_RESPONSE,
+      resp: utils.getAndPrintErrorString(req.url, e),
+    });
+  }
 });
 
 /**

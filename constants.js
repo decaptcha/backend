@@ -19,6 +19,7 @@ const NOT_FOUND_CODE = 404;
 const INCORRECT_RESULT_FROM_DB = "Recieved Incorrect Response from DB";
 const QUERY_PARAM_NOT_PRESENT = "Query param is not present";
 const IMG_NOT_PRESENT = "Image not present";
+const REQUEST_BODY_NOT_PRESENT = "Request body not present";
 const SUCCESS_RESPONSE = {
   status: SUCCESS_HTTP_CODE,
   statusMessage: "OK",
@@ -44,6 +45,7 @@ module.exports = {
   INCORRECT_RESULT_FROM_DB,
   QUERY_PARAM_NOT_PRESENT,
   IMG_NOT_PRESENT,
+  REQUEST_BODY_NOT_PRESENT,
   SUCCESS_RESPONSE,
   ERROR_RESPONSE,
   PRIVATE_KEY,
