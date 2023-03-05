@@ -1,5 +1,8 @@
 const FUNCTIONS = {
-  GET_CATPCHA: "SELECT get_captcha()",
+  GET_CATPCHA: {
+    FUNCTION_NAME: "get_captcha",
+    QUERY: "SELECT get_captcha()",
+  },
 };
 
 module.exports = FUNCTIONS;
