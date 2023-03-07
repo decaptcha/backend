@@ -15,9 +15,13 @@ const storageRootFolder = path.join(__dirname, "./storage");
 const SUCCESS_HTTP_CODE = 200;
 const SERVER_ERROR_CODE = 500;
 const BAD_REQ_ERROR_CODE = 400;
+const FORBIDDEN_ERROR_CODE = 403;
 const NOT_FOUND_CODE = 404;
 const INCORRECT_RESULT_FROM_DB = "Recieved Incorrect Response from DB";
 const QUERY_PARAM_NOT_PRESENT = "Query param is not present";
+const INVALID_WALLET_ID = "Invalid Wallet ID";
+const PROJECT_NOT_PRESENT = "Project not present";
+const USER_NOT_PRESENT = "User not present";
 const IMG_NOT_PRESENT = "Image not present";
 const REQUEST_BODY_NOT_PRESENT = "Request body not present";
 const SUCCESS_RESPONSE = {
@@ -41,9 +45,13 @@ module.exports = {
   SUCCESS_HTTP_CODE,
   SERVER_ERROR_CODE,
   BAD_REQ_ERROR_CODE,
+  FORBIDDEN_ERROR_CODE,
   NOT_FOUND_CODE,
   INCORRECT_RESULT_FROM_DB,
   QUERY_PARAM_NOT_PRESENT,
+  INVALID_WALLET_ID,
+  PROJECT_NOT_PRESENT,
+  USER_NOT_PRESENT,
   IMG_NOT_PRESENT,
   REQUEST_BODY_NOT_PRESENT,
   SUCCESS_RESPONSE,

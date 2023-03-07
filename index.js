@@ -16,9 +16,13 @@ const {
   SUCCESS_HTTP_CODE,
   SERVER_ERROR_CODE,
   BAD_REQ_ERROR_CODE,
+  FORBIDDEN_ERROR_CODE,
   NOT_FOUND_CODE,
   INCORRECT_RESULT_FROM_DB,
   QUERY_PARAM_NOT_PRESENT,
+  INVALID_WALLET_ID,
+  PROJECT_NOT_PRESENT,
+  USER_NOT_PRESENT,
   IMG_NOT_PRESENT,
   REQUEST_BODY_NOT_PRESENT,
   SUCCESS_RESPONSE,
@@ -254,21 +258,71 @@ app.post("/captcha", (req, res) => {
 });
 
 /**
- * API to load details of a specified project
- * RequstBody: {}
- * Response: {}
- */
-app.get("/projects/:project_id", (req, res) => {
-  res.sendStatus(501);
-});
-
-/**
- * API to get the list of projects
+ * API to get the list of a specified project or all the projects if not specified
  * RequstBody: {}
  * Response: {}
  */
 app.get("/projects", (req, res) => {
-  res.sendStatus(501);
+  let code;
+  try {
+    if (req && req.query && req.query.wallet_id) {
+      const pgParams = [req.query.wallet_id.toString()];
+      let query = DB_FUNCTIONS.GET_PROJECT.QUERY_WITH_ONE_ARG;
+      if (req.query.project_id) {
+        pgParams.push(req.query.project_id.toString());
+        query = DB_FUNCTIONS.GET_PROJECT.QUERY_WITH_TWO_ARGS;
+      }
+      pool
+        .query(query, pgParams)
+        .then((results) => {
+          if (
+            utils.validateDBResponse(
+              results,
+              DB_FUNCTIONS.GET_PROJECT.FUNCTION_NAME
+            )
+          ) {
+            if (
+              results.rows[0][DB_FUNCTIONS.GET_PROJECT.FUNCTION_NAME][
+                "error"
+              ] === USER_NOT_PRESENT
+            ) {
+              code = FORBIDDEN_ERROR_CODE;
+              throw INVALID_WALLET_ID;
+            } else if (
+              results.rows[0][DB_FUNCTIONS.GET_PROJECT.FUNCTION_NAME][
+                "error"
+              ] === PROJECT_NOT_PRESENT
+            ) {
+              code = FORBIDDEN_ERROR_CODE;
+              throw PROJECT_NOT_PRESENT;
+            } else {
+              res.status(SUCCESS_HTTP_CODE).json({
+                ...SUCCESS_RESPONSE,
+                resp: results.rows[0][DB_FUNCTIONS.GET_PROJECT.FUNCTION_NAME],
+              });
+            }
+          } else {
+            throw INCORRECT_RESULT_FROM_DB;
+          }
+        })
+        .catch((e) => {
+          setImmediate(() => {
+            res.status(code || SERVER_ERROR_CODE).json({
+              ...ERROR_RESPONSE,
+              resp: utils.getAndPrintErrorString(req.url, e),
+            });
+          });
+        });
+    } else {
+      code = BAD_REQ_ERROR_CODE;
+      throw QUERY_PARAM_NOT_PRESENT;
+    }
+  } catch (e) {
+    res.status(code || SERVER_ERROR_CODE).json({
+      ...ERROR_RESPONSE,
+      resp: utils.getAndPrintErrorString(req.url, e),
+    });
+  }
 });
 
 /**

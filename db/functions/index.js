@@ -7,6 +7,11 @@ const FUNCTIONS = {
     FUNCTION_NAME: "post_captcha",
     QUERY: "SELECT post_captcha($1)",
   },
+  GET_PROJECT: {
+    FUNCTION_NAME: "get_project",
+    QUERY_WITH_ONE_ARG: "SELECT get_project($1)",
+    QUERY_WITH_TWO_ARGS: "SELECT get_project($1, $2)",
+  },
 };
 
 module.exports = FUNCTIONS;
