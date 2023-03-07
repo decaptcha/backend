@@ -151,11 +151,12 @@ app.get("/captcha", (req, res) => {
 app.post("/captcha", (req, res) => {
   let code;
   try {
-    if (req && req.body) {
-      let images = req.body;
+    if (req && req.body && req.body.images) {
+      let images = req.body.images;
       let humanCheckPassed = true;
       const labelledImages = [];
       const unlabelledImages = [];
+      const otherProjectImages = [];
 
       // segregate images into correct arrays
       for (const img of images) {
@@ -175,19 +176,40 @@ app.post("/captcha", (req, res) => {
               labelledImages.push(img);
             } else if (decryptedId.includes("cpui")) {
               unlabelledImages.push(img);
+            } else if (decryptedId.includes("opi")) {
+              otherProjectImages.push(img);
             }
           }
         }
       }
+      console.log(labelledImages);
+      console.log(unlabelledImages);
+      console.log(otherProjectImages);
 
       // Check if user has passed the human check
       if (labelledImages && labelledImages.length > 0) {
+        let oneFalseValueFound = false;
         for (const img of labelledImages) {
-          if (!img.selected) {
-            humanCheckPassed = false;
+          console.log(img);
+          console.log(img.selected);
+          if (img.selected.toString() === "false") {
+            oneFalseValueFound = true;
             break;
           }
         }
+        if (oneFalseValueFound) humanCheckPassed = false;
+      }
+      if (otherProjectImages && otherProjectImages.length > 0) {
+        let oneTrueValueFound = false;
+        for (const img of otherProjectImages) {
+          console.log(img);
+          console.log(img.selected);
+          if (img.selected.toString() === "true") {
+            oneTrueValueFound = true;
+            break;
+          }
+        }
+        if (oneTrueValueFound) humanCheckPassed = false;
       }
 
       // Update data in DB for unlabelled images
@@ -207,7 +229,7 @@ app.post("/captcha", (req, res) => {
           ) {
             res.status(SUCCESS_HTTP_CODE).json({
               ...SUCCESS_RESPONSE,
-              resp: results.rows[0][DB_FUNCTIONS.POST_CATPCHA.FUNCTION_NAME],
+              resp: { humanCheckPassed },
             });
           } else {
             throw INCORRECT_RESULT_FROM_DB;
@@ -227,13 +249,20 @@ app.post("/captcha", (req, res) => {
 });
 
 /**
- * API to load details of the projects
- * if project_id is undefined then return minimal details of all projects of the user.
- * if project_id is defined then return details of the selected project of the user.
+ * API to load details of a specified project
  * RequstBody: {}
  * Response: {}
  */
 app.get("/projects/:project_id", (req, res) => {
+  res.sendStatus(501);
+});
+
+/**
+ * API to get the list of projects
+ * RequstBody: {}
+ * Response: {}
+ */
+app.get("/projects", (req, res) => {
   res.sendStatus(501);
 });
 
