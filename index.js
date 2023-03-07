@@ -156,7 +156,7 @@ app.get("/captcha", (req, res) => {
         .catch((e) => {
           setImmediate(() => {
             res.status(code || SERVER_ERROR_CODE).json({
-              ...ERROR_RESPONSE,
+              ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
               resp: utils.getAndPrintErrorString(req.url, e),
             });
           });
@@ -167,7 +167,7 @@ app.get("/captcha", (req, res) => {
     }
   } catch (e) {
     res.status(SERVER_ERROR_CODE).json({
-      ...ERROR_RESPONSE,
+      ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
       resp: utils.getAndPrintErrorString(req.url, e),
     });
   }
@@ -271,7 +271,7 @@ app.post("/captcha", (req, res) => {
         .catch((e) => {
           setImmediate(() => {
             res.status(code || SERVER_ERROR_CODE).json({
-              ...ERROR_RESPONSE,
+              ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
               resp: utils.getAndPrintErrorString(req.url, e),
             });
           });
@@ -282,7 +282,7 @@ app.post("/captcha", (req, res) => {
     }
   } catch (e) {
     res.status(code || SERVER_ERROR_CODE).json({
-      ...ERROR_RESPONSE,
+      ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
       resp: utils.getAndPrintErrorString(req.url, e),
     });
   }
@@ -339,7 +339,7 @@ app.get("/projects", (req, res) => {
         .catch((e) => {
           setImmediate(() => {
             res.status(code || SERVER_ERROR_CODE).json({
-              ...ERROR_RESPONSE,
+              ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
               resp: utils.getAndPrintErrorString(req.url, e),
             });
           });
@@ -350,7 +350,7 @@ app.get("/projects", (req, res) => {
     }
   } catch (e) {
     res.status(code || SERVER_ERROR_CODE).json({
-      ...ERROR_RESPONSE,
+      ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
       resp: utils.getAndPrintErrorString(req.url, e),
     });
   }
@@ -404,7 +404,7 @@ app.post("/project", (req, res) => {
         .catch((e) => {
           setImmediate(() => {
             res.status(code || SERVER_ERROR_CODE).json({
-              ...ERROR_RESPONSE,
+              ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
               resp: utils.getAndPrintErrorString(req.url, e),
             });
           });
@@ -415,7 +415,7 @@ app.post("/project", (req, res) => {
     }
   } catch (e) {
     res.status(code || SERVER_ERROR_CODE).json({
-      ...ERROR_RESPONSE,
+      ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
       resp: utils.getAndPrintErrorString(req.url, e),
     });
   }
@@ -476,7 +476,7 @@ app.post("/update_project", (req, res) => {
         .catch((e) => {
           setImmediate(() => {
             res.status(code || SERVER_ERROR_CODE).json({
-              ...ERROR_RESPONSE,
+              ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
               resp: utils.getAndPrintErrorString(req.url, e),
             });
           });
@@ -487,7 +487,7 @@ app.post("/update_project", (req, res) => {
     }
   } catch (e) {
     res.status(code || SERVER_ERROR_CODE).json({
-      ...ERROR_RESPONSE,
+      ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
       resp: utils.getAndPrintErrorString(req.url, e),
     });
   }
@@ -543,7 +543,7 @@ app.get("/api_key_stats", (req, res) => {
         .catch((e) => {
           setImmediate(() => {
             res.status(code || SERVER_ERROR_CODE).json({
-              ...ERROR_RESPONSE,
+              ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
               resp: utils.getAndPrintErrorString(req.url, e),
             });
           });
@@ -554,7 +554,7 @@ app.get("/api_key_stats", (req, res) => {
     }
   } catch (e) {
     res.status(code || SERVER_ERROR_CODE).json({
-      ...ERROR_RESPONSE,
+      ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
       resp: utils.getAndPrintErrorString(req.url, e),
     });
   }
@@ -582,7 +582,7 @@ app.get("/image", (req, res) => {
     }
   } catch (e) {
     res.status(code || SERVER_ERROR_CODE).json({
-      ...ERROR_RESPONSE,
+      ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
       resp: utils.getAndPrintErrorString(req.url, e),
     });
   }

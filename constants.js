@@ -30,10 +30,12 @@ const SUCCESS_RESPONSE = {
   statusMessage: "OK",
   resp: {},
 };
-const ERROR_RESPONSE = {
-  status: SERVER_ERROR_CODE,
-  statusMessage: "Error",
-  resp: {},
+const ERROR_RESPONSE = (code = SERVER_ERROR_CODE) => {
+  return {
+    status: code,
+    statusMessage: "Error",
+    resp: {},
+  };
 };
 const PRIVATE_KEY = "32g!kF9RF7T8m1RS57OjgTUlgPsJHegi";
 const ENC_ALGO = "aes256";
