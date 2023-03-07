@@ -440,6 +440,64 @@ app.put("/upload_images/:project_id", (req, res) => {
 });
 
 /**
+ * API to get the API Key Stats
+ * RequstBody: {}
+ * Response: {}
+ */
+app.get("/api_key_stats", (req, res) => {
+  let code;
+  try {
+    if (req && req.query && req.query.wallet_id) {
+      const wallet_id = req.query.wallet_id;
+      pool
+        .query(DB_FUNCTIONS.GET_API_KEY_STATS.QUERY, [wallet_id])
+        .then((results) => {
+          if (
+            utils.validateDBResponse(
+              results,
+              DB_FUNCTIONS.GET_API_KEY_STATS.FUNCTION_NAME
+            )
+          ) {
+            if (
+              results.rows[0][DB_FUNCTIONS.GET_API_KEY_STATS.FUNCTION_NAME][
+                "error"
+              ] === USER_NOT_PRESENT
+            ) {
+              code = FORBIDDEN_ERROR_CODE;
+              throw INVALID_WALLET_ID;
+            }
+
+            res.status(SUCCESS_HTTP_CODE).json({
+              ...SUCCESS_RESPONSE,
+              resp: results.rows[0][
+                DB_FUNCTIONS.GET_API_KEY_STATS.FUNCTION_NAME
+              ],
+            });
+          } else {
+            throw INCORRECT_RESULT_FROM_DB;
+          }
+        })
+        .catch((e) => {
+          setImmediate(() => {
+            res.status(code || SERVER_ERROR_CODE).json({
+              ...ERROR_RESPONSE,
+              resp: utils.getAndPrintErrorString(req.url, e),
+            });
+          });
+        });
+    } else {
+      code = BAD_REQ_ERROR_CODE;
+      throw QUERY_PARAM_NOT_PRESENT;
+    }
+  } catch (e) {
+    res.status(code || SERVER_ERROR_CODE).json({
+      ...ERROR_RESPONSE,
+      resp: utils.getAndPrintErrorString(req.url, e),
+    });
+  }
+});
+
+/**
  * API to serve image files
  * RequstBody: {}
  * Response: {}
