@@ -182,108 +182,103 @@ app.get("/captcha", (req, res) => {
 app.post("/captcha", (req, res) => {
   let code;
   try {
-    if (req && req.query && req.query.api_key) {
-      const api_key = req.query.api_key;
-      if (req && req.body && req.body.images) {
-        let images = req.body.images;
-        let humanCheckPassed = true;
-        const labelledImages = [];
-        const unlabelledImages = [];
-        const otherProjectImages = [];
+    if (req && req.body && req.body.images && req.body.api_key) {
+      let images = req.body.images;
+      const api_key = req.body.api_key;
+      let humanCheckPassed = true;
+      const labelledImages = [];
+      const unlabelledImages = [];
+      const otherProjectImages = [];
 
-        // segregate images into correct arrays
-        for (const img of images) {
-          if (img && img.id) {
-            const decryptedId = utils.decryptValue(img.id);
-            if (decryptedId) {
-              decryptedIdSplit = decryptedId.split(":");
-              if (!decryptedIdSplit || decryptedIdSplit.length !== 3) {
-                console.log(
-                  `Invalid decryptedId found: ${decryptedId}. Request Body: ${images}`
-                );
-                continue;
-              }
+      // segregate images into correct arrays
+      for (const img of images) {
+        if (img && img.id) {
+          const decryptedId = utils.decryptValue(img.id);
+          if (decryptedId) {
+            decryptedIdSplit = decryptedId.split(":");
+            if (!decryptedIdSplit || decryptedIdSplit.length !== 3) {
+              console.log(
+                `Invalid decryptedId found: ${decryptedId}. Request Body: ${images}`
+              );
+              continue;
+            }
 
-              img.id = decryptedId.split(":")[2];
-              if (decryptedId.includes("cpli")) {
-                labelledImages.push(img);
-              } else if (decryptedId.includes("cpui")) {
-                unlabelledImages.push(img);
-              } else if (decryptedId.includes("opi")) {
-                otherProjectImages.push(img);
-              }
+            img.id = decryptedId.split(":")[2];
+            if (decryptedId.includes("cpli")) {
+              labelledImages.push(img);
+            } else if (decryptedId.includes("cpui")) {
+              unlabelledImages.push(img);
+            } else if (decryptedId.includes("opi")) {
+              otherProjectImages.push(img);
             }
           }
         }
+      }
 
-        // Check if user has passed the human check
-        if (labelledImages && labelledImages.length > 0) {
-          let oneFalseValueFound = false;
-          for (const img of labelledImages) {
-            if (img.selected.toString() === "false") {
-              oneFalseValueFound = true;
-              break;
-            }
+      // Check if user has passed the human check
+      if (labelledImages && labelledImages.length > 0) {
+        let oneFalseValueFound = false;
+        for (const img of labelledImages) {
+          if (img.selected.toString() === "false") {
+            oneFalseValueFound = true;
+            break;
           }
-          if (oneFalseValueFound) humanCheckPassed = false;
         }
-        if (otherProjectImages && otherProjectImages.length > 0) {
-          let oneTrueValueFound = false;
-          for (const img of otherProjectImages) {
-            if (img.selected.toString() === "true") {
-              oneTrueValueFound = true;
-              break;
-            }
+        if (oneFalseValueFound) humanCheckPassed = false;
+      }
+      if (otherProjectImages && otherProjectImages.length > 0) {
+        let oneTrueValueFound = false;
+        for (const img of otherProjectImages) {
+          if (img.selected.toString() === "true") {
+            oneTrueValueFound = true;
+            break;
           }
-          if (oneTrueValueFound) humanCheckPassed = false;
         }
+        if (oneTrueValueFound) humanCheckPassed = false;
+      }
 
-        // Update data in DB for unlabelled images
-        pool
-          .query(DB_FUNCTIONS.POST_CATPCHA.QUERY, [
-            JSON.stringify(unlabelledImages),
-            unlabelledImages.length,
-            api_key.toString(),
-          ])
-          .then((results) => {
+      // Update data in DB for unlabelled images
+      pool
+        .query(DB_FUNCTIONS.POST_CATPCHA.QUERY, [
+          JSON.stringify(unlabelledImages),
+          unlabelledImages.length,
+          api_key.toString(),
+        ])
+        .then((results) => {
+          if (
+            utils.validateDBResponse(
+              results,
+              DB_FUNCTIONS.POST_CATPCHA.FUNCTION_NAME
+            )
+          ) {
             if (
-              utils.validateDBResponse(
-                results,
-                DB_FUNCTIONS.POST_CATPCHA.FUNCTION_NAME
-              )
+              results.rows[0][DB_FUNCTIONS.POST_CATPCHA.FUNCTION_NAME][
+                "error"
+              ] === INVALID_API_KEY
             ) {
-              if (
-                results.rows[0][DB_FUNCTIONS.POST_CATPCHA.FUNCTION_NAME][
-                  "error"
-                ] === INVALID_API_KEY
-              ) {
-                code = FORBIDDEN_ERROR_CODE;
-                throw INVALID_API_KEY;
-              }
-
-              res.status(SUCCESS_HTTP_CODE).json({
-                ...SUCCESS_RESPONSE,
-                resp: { humanCheckPassed },
-              });
-            } else {
-              throw INCORRECT_RESULT_FROM_DB;
+              code = FORBIDDEN_ERROR_CODE;
+              throw INVALID_API_KEY;
             }
-          })
-          .catch((e) => {
-            setImmediate(() => {
-              res.status(code || SERVER_ERROR_CODE).json({
-                ...ERROR_RESPONSE,
-                resp: utils.getAndPrintErrorString(req.url, e),
-              });
+
+            res.status(SUCCESS_HTTP_CODE).json({
+              ...SUCCESS_RESPONSE,
+              resp: { humanCheckPassed },
+            });
+          } else {
+            throw INCORRECT_RESULT_FROM_DB;
+          }
+        })
+        .catch((e) => {
+          setImmediate(() => {
+            res.status(code || SERVER_ERROR_CODE).json({
+              ...ERROR_RESPONSE,
+              resp: utils.getAndPrintErrorString(req.url, e),
             });
           });
-      } else {
-        code = BAD_REQ_ERROR_CODE;
-        throw REQUEST_BODY_NOT_PRESENT;
-      }
+        });
     } else {
       code = BAD_REQ_ERROR_CODE;
-      throw QUERY_PARAM_NOT_PRESENT;
+      throw REQUEST_BODY_NOT_PRESENT;
     }
   } catch (e) {
     res.status(code || SERVER_ERROR_CODE).json({
@@ -367,7 +362,63 @@ app.get("/projects", (req, res) => {
  * Response: {}
  */
 app.post("/project", (req, res) => {
-  res.sendStatus(501);
+  let code;
+  try {
+    console.log(req.body);
+    if (req && req.body && req.body.project) {
+      const project = req.body.project;
+
+      [isValid, validationMessage] = utils.validateProject(project);
+
+      if (!isValid) {
+        code = BAD_REQ_ERROR_CODE;
+        throw validationMessage;
+      }
+
+      pool
+        .query(DB_FUNCTIONS.ADD_PROJECT.QUERY, [JSON.stringify(project)])
+        .then((results) => {
+          if (
+            utils.validateDBResponse(
+              results,
+              DB_FUNCTIONS.ADD_PROJECT.FUNCTION_NAME
+            )
+          ) {
+            if (
+              results.rows[0][DB_FUNCTIONS.ADD_PROJECT.FUNCTION_NAME][
+                "error"
+              ] === USER_NOT_PRESENT
+            ) {
+              code = NOT_FOUND_CODE;
+              throw USER_NOT_PRESENT;
+            }
+
+            res.status(SUCCESS_HTTP_CODE).json({
+              ...SUCCESS_RESPONSE,
+              resp: results.rows[0][DB_FUNCTIONS.ADD_PROJECT.FUNCTION_NAME],
+            });
+          } else {
+            throw INCORRECT_RESULT_FROM_DB;
+          }
+        })
+        .catch((e) => {
+          setImmediate(() => {
+            res.status(code || SERVER_ERROR_CODE).json({
+              ...ERROR_RESPONSE,
+              resp: utils.getAndPrintErrorString(req.url, e),
+            });
+          });
+        });
+    } else {
+      code = BAD_REQ_ERROR_CODE;
+      throw REQUEST_BODY_NOT_PRESENT;
+    }
+  } catch (e) {
+    res.status(code || SERVER_ERROR_CODE).json({
+      ...ERROR_RESPONSE,
+      resp: utils.getAndPrintErrorString(req.url, e),
+    });
+  }
 });
 
 /**

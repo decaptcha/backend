@@ -12,6 +12,10 @@ const FUNCTIONS = {
     QUERY_WITH_ONE_ARG: "SELECT get_project($1)",
     QUERY_WITH_TWO_ARGS: "SELECT get_project($1, $2)",
   },
+  ADD_PROJECT: {
+    FUNCTION_NAME: "add_project",
+    QUERY: "SELECT add_project($1)",
+  },
 };
 
 module.exports = FUNCTIONS;

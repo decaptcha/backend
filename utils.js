@@ -145,6 +145,44 @@ const validateDBResponse = (response, functionName) => {
   );
 };
 
+/**
+ * Validates the project object
+ * @param {object} project - the project object that will be used for creating the object
+ * @returns Array[boolean, string]
+ */
+const validateProject = (project) => {
+  if (!project) return [false, "Project Object undefined"];
+
+  if (!project.wallet_id) return [false, "Wallet ID undefined"];
+  if (project.wallet_id.toString().trim() === "")
+    return [false, "Wallet ID empty"];
+
+  if (!project.name) return [false, "Project Name undefined"];
+  if (project.name.toString().trim() === "")
+    return [false, "Project Name empty"];
+
+  if (!project.label_value) return [false, "Project Label undefined"];
+  if (project.label_value.toString().trim() === "")
+    return [false, "Project Label empty"];
+
+  if (!project.threshold) return [false, "Project Threshold undefined"];
+  if (project.threshold.toString().trim() === "")
+    return [false, "Project Threshold empty"];
+
+  if (!project.expiry) return [false, "Project Expiry undefined"];
+  if (project.expiry.toString().trim() === "")
+    return [false, "Project Expiry empty"];
+  try {
+    const date = new Date(project.expiry);
+    if (date == "Invalid Date")
+      return [false, "Project Expiry is not a valid date"];
+  } catch (e) {
+    return [false, "Project Expiry is not a valid date"];
+  }
+
+  return [true, "Valid Project Object"];
+};
+
 module.exports = {
   getAndPrintErrorString,
   encryptValue,
@@ -155,4 +193,5 @@ module.exports = {
   getImgPath,
   shuffleArray,
   validateDBResponse,
+  validateProject,
 };
