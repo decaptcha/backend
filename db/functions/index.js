@@ -1,11 +1,11 @@
 const FUNCTIONS = {
   GET_CATPCHA: {
     FUNCTION_NAME: "get_captcha",
-    QUERY: "SELECT get_captcha()",
+    QUERY: "SELECT get_captcha($1)",
   },
   POST_CATPCHA: {
     FUNCTION_NAME: "post_captcha",
-    QUERY: "SELECT post_captcha($1)",
+    QUERY: "SELECT post_captcha($1, $2, $3)",
   },
   GET_PROJECT: {
     FUNCTION_NAME: "get_project",

@@ -20,6 +20,7 @@ const NOT_FOUND_CODE = 404;
 const INCORRECT_RESULT_FROM_DB = "Recieved Incorrect Response from DB";
 const QUERY_PARAM_NOT_PRESENT = "Query param is not present";
 const INVALID_WALLET_ID = "Invalid Wallet ID";
+const INVALID_API_KEY = "Invalid API Key";
 const PROJECT_NOT_PRESENT = "Project not present";
 const USER_NOT_PRESENT = "User not present";
 const IMG_NOT_PRESENT = "Image not present";
@@ -50,6 +51,7 @@ module.exports = {
   INCORRECT_RESULT_FROM_DB,
   QUERY_PARAM_NOT_PRESENT,
   INVALID_WALLET_ID,
+  INVALID_API_KEY,
   PROJECT_NOT_PRESENT,
   USER_NOT_PRESENT,
   IMG_NOT_PRESENT,

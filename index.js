@@ -21,6 +21,7 @@ const {
   INCORRECT_RESULT_FROM_DB,
   QUERY_PARAM_NOT_PRESENT,
   INVALID_WALLET_ID,
+  INVALID_API_KEY,
   PROJECT_NOT_PRESENT,
   USER_NOT_PRESENT,
   IMG_NOT_PRESENT,
@@ -61,91 +62,109 @@ app.get("/", (req, res) => {
  * Response: {}
  */
 app.get("/captcha", (req, res) => {
+  let code;
   try {
-    pool
-      .query(DB_FUNCTIONS.GET_CATPCHA.QUERY)
-      .then((results) => {
-        let resp = { label: null, images: [] };
-
-        if (
-          utils.validateDBResponse(
-            results,
-            DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
-          )
-        ) {
-          if (
-            results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["label"]
-          ) {
-            resp.label =
-              results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["label"];
-          }
+    if (req && req.query && req.query.api_key) {
+      const api_key = req.query.api_key;
+      pool
+        .query(DB_FUNCTIONS.GET_CATPCHA.QUERY, [api_key.toString()])
+        .then((results) => {
+          let resp = { label: null, images: [] };
 
           if (
-            results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["images"][
-              "current_project_labelled_images"
-            ]
-          ) {
-            for (const img of results.rows[0][
+            utils.validateDBResponse(
+              results,
               DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
-            ]["images"]["current_project_labelled_images"]) {
-              resp.images.push({
-                url: utils.getImgURL(img.url),
-                id: utils.encryptValue(
-                  `${crypto.randomInt(10000, 99999)}:cpli:${img.id}`
-                ),
-              });
-            }
-          }
-
-          if (
-            results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["images"][
-              "current_project_unlabelled_images"
-            ]
+            )
           ) {
-            for (const img of results.rows[0][
-              DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
-            ]["images"]["current_project_unlabelled_images"]) {
-              resp.images.push({
-                url: utils.getImgURL(img.url),
-                id: utils.encryptValue(
-                  `${crypto.randomInt(10000, 99999)}:cpui:${img.id}`
-                ),
-              });
+            if (
+              results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME][
+                "error"
+              ] === INVALID_API_KEY
+            ) {
+              code = FORBIDDEN_ERROR_CODE;
+              throw INVALID_API_KEY;
             }
+
+            if (
+              results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["label"]
+            ) {
+              resp.label =
+                results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME][
+                  "label"
+                ];
+            }
+
+            if (
+              results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["images"][
+                "current_project_labelled_images"
+              ]
+            ) {
+              for (const img of results.rows[0][
+                DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
+              ]["images"]["current_project_labelled_images"]) {
+                resp.images.push({
+                  url: utils.getImgURL(img.url),
+                  id: utils.encryptValue(
+                    `${crypto.randomInt(10000, 99999)}:cpli:${img.id}`
+                  ),
+                });
+              }
+            }
+
+            if (
+              results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["images"][
+                "current_project_unlabelled_images"
+              ]
+            ) {
+              for (const img of results.rows[0][
+                DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
+              ]["images"]["current_project_unlabelled_images"]) {
+                resp.images.push({
+                  url: utils.getImgURL(img.url),
+                  id: utils.encryptValue(
+                    `${crypto.randomInt(10000, 99999)}:cpui:${img.id}`
+                  ),
+                });
+              }
+            }
+
+            if (
+              results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["images"][
+                "other_project_images"
+              ]
+            ) {
+              for (const img of results.rows[0][
+                DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
+              ]["images"]["other_project_images"]) {
+                resp.images.push({
+                  url: utils.getImgURL(img.url),
+                  id: utils.encryptValue(
+                    `${crypto.randomInt(10000, 99999)}:opi:${img.id}`
+                  ),
+                });
+              }
+            }
+          } else {
+            throw INCORRECT_RESULT_FROM_DB;
           }
 
-          if (
-            results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["images"][
-              "other_project_images"
-            ]
-          ) {
-            for (const img of results.rows[0][
-              DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
-            ]["images"]["other_project_images"]) {
-              resp.images.push({
-                url: utils.getImgURL(img.url),
-                id: utils.encryptValue(
-                  `${crypto.randomInt(10000, 99999)}:opi:${img.id}`
-                ),
-              });
-            }
-          }
-        } else {
-          throw INCORRECT_RESULT_FROM_DB;
-        }
+          resp.images = utils.shuffleArray(resp.images);
 
-        resp.images = utils.shuffleArray(resp.images);
-
-        res.status(SUCCESS_HTTP_CODE).json({ ...SUCCESS_RESPONSE, resp });
-      })
-      .catch((e) => {
-        setImmediate(() => {
-          res.status(code || SERVER_ERROR_CODE).json({
-            ...ERROR_RESPONSE,
-            resp: utils.getAndPrintErrorString(req.url, e),
+          res.status(SUCCESS_HTTP_CODE).json({ ...SUCCESS_RESPONSE, resp });
+        })
+        .catch((e) => {
+          setImmediate(() => {
+            res.status(code || SERVER_ERROR_CODE).json({
+              ...ERROR_RESPONSE,
+              resp: utils.getAndPrintErrorString(req.url, e),
+            });
           });
         });
-      });
+    } else {
+      code = BAD_REQ_ERROR_CODE;
+      throw QUERY_PARAM_NOT_PRESENT;
+    }
   } catch (e) {
     res.status(SERVER_ERROR_CODE).json({
       ...ERROR_RESPONSE,
@@ -163,91 +182,108 @@ app.get("/captcha", (req, res) => {
 app.post("/captcha", (req, res) => {
   let code;
   try {
-    if (req && req.body && req.body.images) {
-      let images = req.body.images;
-      let humanCheckPassed = true;
-      const labelledImages = [];
-      const unlabelledImages = [];
-      const otherProjectImages = [];
+    if (req && req.query && req.query.api_key) {
+      const api_key = req.query.api_key;
+      if (req && req.body && req.body.images) {
+        let images = req.body.images;
+        let humanCheckPassed = true;
+        const labelledImages = [];
+        const unlabelledImages = [];
+        const otherProjectImages = [];
 
-      // segregate images into correct arrays
-      for (const img of images) {
-        if (img && img.id) {
-          const decryptedId = utils.decryptValue(img.id);
-          if (decryptedId) {
-            decryptedIdSplit = decryptedId.split(":");
-            if (!decryptedIdSplit || decryptedIdSplit.length !== 3) {
-              console.log(
-                `Invalid decryptedId found: ${decryptedId}. Request Body: ${images}`
-              );
-              continue;
+        // segregate images into correct arrays
+        for (const img of images) {
+          if (img && img.id) {
+            const decryptedId = utils.decryptValue(img.id);
+            if (decryptedId) {
+              decryptedIdSplit = decryptedId.split(":");
+              if (!decryptedIdSplit || decryptedIdSplit.length !== 3) {
+                console.log(
+                  `Invalid decryptedId found: ${decryptedId}. Request Body: ${images}`
+                );
+                continue;
+              }
+
+              img.id = decryptedId.split(":")[2];
+              if (decryptedId.includes("cpli")) {
+                labelledImages.push(img);
+              } else if (decryptedId.includes("cpui")) {
+                unlabelledImages.push(img);
+              } else if (decryptedId.includes("opi")) {
+                otherProjectImages.push(img);
+              }
             }
+          }
+        }
 
-            img.id = decryptedId.split(":")[2];
-            if (decryptedId.includes("cpli")) {
-              labelledImages.push(img);
-            } else if (decryptedId.includes("cpui")) {
-              unlabelledImages.push(img);
-            } else if (decryptedId.includes("opi")) {
-              otherProjectImages.push(img);
+        // Check if user has passed the human check
+        if (labelledImages && labelledImages.length > 0) {
+          let oneFalseValueFound = false;
+          for (const img of labelledImages) {
+            if (img.selected.toString() === "false") {
+              oneFalseValueFound = true;
+              break;
             }
           }
+          if (oneFalseValueFound) humanCheckPassed = false;
         }
-      }
+        if (otherProjectImages && otherProjectImages.length > 0) {
+          let oneTrueValueFound = false;
+          for (const img of otherProjectImages) {
+            if (img.selected.toString() === "true") {
+              oneTrueValueFound = true;
+              break;
+            }
+          }
+          if (oneTrueValueFound) humanCheckPassed = false;
+        }
 
-      // Check if user has passed the human check
-      if (labelledImages && labelledImages.length > 0) {
-        let oneFalseValueFound = false;
-        for (const img of labelledImages) {
-          if (img.selected.toString() === "false") {
-            oneFalseValueFound = true;
-            break;
-          }
-        }
-        if (oneFalseValueFound) humanCheckPassed = false;
-      }
-      if (otherProjectImages && otherProjectImages.length > 0) {
-        let oneTrueValueFound = false;
-        for (const img of otherProjectImages) {
-          if (img.selected.toString() === "true") {
-            oneTrueValueFound = true;
-            break;
-          }
-        }
-        if (oneTrueValueFound) humanCheckPassed = false;
-      }
+        // Update data in DB for unlabelled images
+        pool
+          .query(DB_FUNCTIONS.POST_CATPCHA.QUERY, [
+            JSON.stringify(unlabelledImages),
+            unlabelledImages.length,
+            api_key.toString(),
+          ])
+          .then((results) => {
+            if (
+              utils.validateDBResponse(
+                results,
+                DB_FUNCTIONS.POST_CATPCHA.FUNCTION_NAME
+              )
+            ) {
+              if (
+                results.rows[0][DB_FUNCTIONS.POST_CATPCHA.FUNCTION_NAME][
+                  "error"
+                ] === INVALID_API_KEY
+              ) {
+                code = FORBIDDEN_ERROR_CODE;
+                throw INVALID_API_KEY;
+              }
 
-      // Update data in DB for unlabelled images
-      pool
-        .query(DB_FUNCTIONS.POST_CATPCHA.QUERY, [
-          JSON.stringify(unlabelledImages),
-        ])
-        .then((results) => {
-          if (
-            utils.validateDBResponse(
-              results,
-              DB_FUNCTIONS.POST_CATPCHA.FUNCTION_NAME
-            )
-          ) {
-            res.status(SUCCESS_HTTP_CODE).json({
-              ...SUCCESS_RESPONSE,
-              resp: { humanCheckPassed },
-            });
-          } else {
-            throw INCORRECT_RESULT_FROM_DB;
-          }
-        })
-        .catch((e) => {
-          setImmediate(() => {
-            res.status(code || SERVER_ERROR_CODE).json({
-              ...ERROR_RESPONSE,
-              resp: utils.getAndPrintErrorString(req.url, e),
+              res.status(SUCCESS_HTTP_CODE).json({
+                ...SUCCESS_RESPONSE,
+                resp: { humanCheckPassed },
+              });
+            } else {
+              throw INCORRECT_RESULT_FROM_DB;
+            }
+          })
+          .catch((e) => {
+            setImmediate(() => {
+              res.status(code || SERVER_ERROR_CODE).json({
+                ...ERROR_RESPONSE,
+                resp: utils.getAndPrintErrorString(req.url, e),
+              });
             });
           });
-        });
+      } else {
+        code = BAD_REQ_ERROR_CODE;
+        throw REQUEST_BODY_NOT_PRESENT;
+      }
     } else {
       code = BAD_REQ_ERROR_CODE;
-      throw REQUEST_BODY_NOT_PRESENT;
+      throw QUERY_PARAM_NOT_PRESENT;
     }
   } catch (e) {
     res.status(code || SERVER_ERROR_CODE).json({
@@ -295,12 +331,12 @@ app.get("/projects", (req, res) => {
             ) {
               code = FORBIDDEN_ERROR_CODE;
               throw PROJECT_NOT_PRESENT;
-            } else {
-              res.status(SUCCESS_HTTP_CODE).json({
-                ...SUCCESS_RESPONSE,
-                resp: results.rows[0][DB_FUNCTIONS.GET_PROJECT.FUNCTION_NAME],
-              });
             }
+
+            res.status(SUCCESS_HTTP_CODE).json({
+              ...SUCCESS_RESPONSE,
+              resp: results.rows[0][DB_FUNCTIONS.GET_PROJECT.FUNCTION_NAME],
+            });
           } else {
             throw INCORRECT_RESULT_FROM_DB;
           }
