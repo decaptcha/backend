@@ -16,6 +16,10 @@ const FUNCTIONS = {
     FUNCTION_NAME: "add_project",
     QUERY: "SELECT add_project($1)",
   },
+  UPDATE_PROJECT: {
+    FUNCTION_NAME: "update_project",
+    QUERY: "SELECT update_project($1)",
+  },
   GET_API_KEY_STATS: {
     FUNCTION_NAME: "get_api_key_stats",
     QUERY: "SELECT get_api_key_stats($1)",

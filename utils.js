@@ -146,12 +146,17 @@ const validateDBResponse = (response, functionName) => {
 };
 
 /**
- * Validates the project object
+ * Validates the project object that is used for the creation/updation of the project
  * @param {object} project - the project object that will be used for creating the object
+ * @param {boolean} isUpdate - [optional] this involves validation of additional properties
  * @returns Array[boolean, string]
  */
-const validateProject = (project) => {
+const validateProject = (project, isUpdateObject = false) => {
   if (!project) return [false, "Project Object undefined"];
+
+  if (isUpdateObject && !project.id) return [false, "Project ID undefined"];
+  if (isUpdateObject && project.id.toString().trim() === "")
+    return [false, "Project ID empty"];
 
   if (!project.wallet_id) return [false, "Wallet ID undefined"];
   if (project.wallet_id.toString().trim() === "")
@@ -169,6 +174,9 @@ const validateProject = (project) => {
   if (project.threshold.toString().trim() === "")
     return [false, "Project Threshold empty"];
 
+  if (isUpdateObject && project.active.toString().trim() === "")
+    return [false, "Project Threshold empty"];
+
   if (!project.expiry) return [false, "Project Expiry undefined"];
   if (project.expiry.toString().trim() === "")
     return [false, "Project Expiry empty"];
@@ -176,6 +184,8 @@ const validateProject = (project) => {
     const date = new Date(project.expiry);
     if (date == "Invalid Date")
       return [false, "Project Expiry is not a valid date"];
+    if (date < new Date())
+      return [false, "Project Expiry cannot be less than current date"];
   } catch (e) {
     return [false, "Project Expiry is not a valid date"];
   }

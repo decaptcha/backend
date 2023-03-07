@@ -422,12 +422,75 @@ app.post("/project", (req, res) => {
 });
 
 /**
- * API to mark a project as inactive
+ * API to change the status of a project active|inactive
  * RequstBody: {}
  * Response: {}
  */
-app.delete("/project/:project_id", (req, res) => {
-  res.sendStatus(501);
+app.post("/update_project", (req, res) => {
+  let code;
+  try {
+    console.log(req.body);
+    if (req && req.body && req.body.project) {
+      const project = req.body.project;
+
+      [isValid, validationMessage] = utils.validateProject(project, true);
+
+      if (!isValid) {
+        code = BAD_REQ_ERROR_CODE;
+        throw validationMessage;
+      }
+
+      pool
+        .query(DB_FUNCTIONS.UPDATE_PROJECT.QUERY, [JSON.stringify(project)])
+        .then((results) => {
+          if (
+            utils.validateDBResponse(
+              results,
+              DB_FUNCTIONS.UPDATE_PROJECT.FUNCTION_NAME
+            )
+          ) {
+            if (
+              results.rows[0][DB_FUNCTIONS.UPDATE_PROJECT.FUNCTION_NAME][
+                "error"
+              ] === USER_NOT_PRESENT
+            ) {
+              code = NOT_FOUND_CODE;
+              throw USER_NOT_PRESENT;
+            } else if (
+              results.rows[0][DB_FUNCTIONS.UPDATE_PROJECT.FUNCTION_NAME][
+                "error"
+              ] === PROJECT_NOT_PRESENT
+            ) {
+              code = NOT_FOUND_CODE;
+              throw PROJECT_NOT_PRESENT;
+            }
+
+            res.status(SUCCESS_HTTP_CODE).json({
+              ...SUCCESS_RESPONSE,
+              resp: results.rows[0][DB_FUNCTIONS.UPDATE_PROJECT.FUNCTION_NAME],
+            });
+          } else {
+            throw INCORRECT_RESULT_FROM_DB;
+          }
+        })
+        .catch((e) => {
+          setImmediate(() => {
+            res.status(code || SERVER_ERROR_CODE).json({
+              ...ERROR_RESPONSE,
+              resp: utils.getAndPrintErrorString(req.url, e),
+            });
+          });
+        });
+    } else {
+      code = BAD_REQ_ERROR_CODE;
+      throw REQUEST_BODY_NOT_PRESENT;
+    }
+  } catch (e) {
+    res.status(code || SERVER_ERROR_CODE).json({
+      ...ERROR_RESPONSE,
+      resp: utils.getAndPrintErrorString(req.url, e),
+    });
+  }
 });
 
 /**
