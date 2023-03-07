@@ -58,82 +58,90 @@ app.get("/", (req, res) => {
  */
 app.get("/captcha", (req, res) => {
   try {
-    pool.query(DB_FUNCTIONS.GET_CATPCHA.QUERY, (e, results) => {
-      if (e) {
-        throw e;
-      }
-
-      let resp = { label: null, images: [] };
-
-      if (
-        utils.validateDBResponse(
-          results,
-          DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
-        )
-      ) {
-        if (results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["label"]) {
-          resp.label =
-            results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["label"];
-        }
+    pool
+      .query(DB_FUNCTIONS.GET_CATPCHA.QUERY)
+      .then((results) => {
+        let resp = { label: null, images: [] };
 
         if (
-          results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["images"][
-            "current_project_labelled_images"
-          ]
-        ) {
-          for (const img of results.rows[0][
+          utils.validateDBResponse(
+            results,
             DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
-          ]["images"]["current_project_labelled_images"]) {
-            resp.images.push({
-              url: utils.getImgURL(img.url),
-              id: utils.encryptValue(
-                `${crypto.randomInt(10000, 99999)}:cpli:${img.id}`
-              ),
-            });
+          )
+        ) {
+          if (
+            results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["label"]
+          ) {
+            resp.label =
+              results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["label"];
           }
+
+          if (
+            results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["images"][
+              "current_project_labelled_images"
+            ]
+          ) {
+            for (const img of results.rows[0][
+              DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
+            ]["images"]["current_project_labelled_images"]) {
+              resp.images.push({
+                url: utils.getImgURL(img.url),
+                id: utils.encryptValue(
+                  `${crypto.randomInt(10000, 99999)}:cpli:${img.id}`
+                ),
+              });
+            }
+          }
+
+          if (
+            results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["images"][
+              "current_project_unlabelled_images"
+            ]
+          ) {
+            for (const img of results.rows[0][
+              DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
+            ]["images"]["current_project_unlabelled_images"]) {
+              resp.images.push({
+                url: utils.getImgURL(img.url),
+                id: utils.encryptValue(
+                  `${crypto.randomInt(10000, 99999)}:cpui:${img.id}`
+                ),
+              });
+            }
+          }
+
+          if (
+            results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["images"][
+              "other_project_images"
+            ]
+          ) {
+            for (const img of results.rows[0][
+              DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
+            ]["images"]["other_project_images"]) {
+              resp.images.push({
+                url: utils.getImgURL(img.url),
+                id: utils.encryptValue(
+                  `${crypto.randomInt(10000, 99999)}:opi:${img.id}`
+                ),
+              });
+            }
+          }
+        } else {
+          throw INCORRECT_RESULT_FROM_DB;
         }
 
-        if (
-          results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["images"][
-            "current_project_unlabelled_images"
-          ]
-        ) {
-          for (const img of results.rows[0][
-            DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
-          ]["images"]["current_project_unlabelled_images"]) {
-            resp.images.push({
-              url: utils.getImgURL(img.url),
-              id: utils.encryptValue(
-                `${crypto.randomInt(10000, 99999)}:cpui:${img.id}`
-              ),
-            });
-          }
-        }
+        resp.images = utils.shuffleArray(resp.images);
 
-        if (
-          results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["images"][
-            "other_project_images"
-          ]
-        ) {
-          for (const img of results.rows[0][
-            DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
-          ]["images"]["other_project_images"]) {
-            resp.images.push({
-              url: utils.getImgURL(img.url),
-              id: utils.encryptValue(
-                `${crypto.randomInt(10000, 99999)}:opi:${img.id}`
-              ),
-            });
-          }
-        }
-      } else {
-        throw INCORRECT_RESULT_FROM_DB;
-      }
-
-      resp.images = utils.shuffleArray(resp.images);
-
-      res.status(SUCCESS_HTTP_CODE).json({ ...SUCCESS_RESPONSE, resp });
-    });
+        res.status(SUCCESS_HTTP_CODE).json({ ...SUCCESS_RESPONSE, resp });
+      })
+      .catch((e) => {
+        setImmediate(() => {
+          res.status(code || SERVER_ERROR_CODE).json({
+            ...ERROR_RESPONSE,
+            resp: utils.getAndPrintErrorString(req.url, e),
+          });
+        });
+      });
   } catch (e) {
     res.status(SERVER_ERROR_CODE).json({
       ...ERROR_RESPONSE,
@@ -182,16 +190,11 @@ app.post("/captcha", (req, res) => {
           }
         }
       }
-      console.log(labelledImages);
-      console.log(unlabelledImages);
-      console.log(otherProjectImages);
 
       // Check if user has passed the human check
       if (labelledImages && labelledImages.length > 0) {
         let oneFalseValueFound = false;
         for (const img of labelledImages) {
-          console.log(img);
-          console.log(img.selected);
           if (img.selected.toString() === "false") {
             oneFalseValueFound = true;
             break;
@@ -202,8 +205,6 @@ app.post("/captcha", (req, res) => {
       if (otherProjectImages && otherProjectImages.length > 0) {
         let oneTrueValueFound = false;
         for (const img of otherProjectImages) {
-          console.log(img);
-          console.log(img.selected);
           if (img.selected.toString() === "true") {
             oneTrueValueFound = true;
             break;
@@ -213,14 +214,11 @@ app.post("/captcha", (req, res) => {
       }
 
       // Update data in DB for unlabelled images
-      pool.query(
-        DB_FUNCTIONS.POST_CATPCHA.QUERY,
-        [JSON.stringify(unlabelledImages)],
-        (e, results) => {
-          if (e) {
-            throw e;
-          }
-
+      pool
+        .query(DB_FUNCTIONS.POST_CATPCHA.QUERY, [
+          JSON.stringify(unlabelledImages),
+        ])
+        .then((results) => {
           if (
             utils.validateDBResponse(
               results,
@@ -234,8 +232,15 @@ app.post("/captcha", (req, res) => {
           } else {
             throw INCORRECT_RESULT_FROM_DB;
           }
-        }
-      );
+        })
+        .catch((e) => {
+          setImmediate(() => {
+            res.status(code || SERVER_ERROR_CODE).json({
+              ...ERROR_RESPONSE,
+              resp: utils.getAndPrintErrorString(req.url, e),
+            });
+          });
+        });
     } else {
       code = BAD_REQ_ERROR_CODE;
       throw REQUEST_BODY_NOT_PRESENT;
