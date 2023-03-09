@@ -77,29 +77,19 @@ app.get("/captcha", (req, res) => {
               DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
             )
           ) {
-            if (
-              results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME][
-                "error"
-              ] === INVALID_API_KEY
-            ) {
+            const dbResponse =
+              results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME];
+
+            if (dbResponse["error"] === INVALID_API_KEY) {
               code = FORBIDDEN_ERROR_CODE;
               throw INVALID_API_KEY;
             }
 
-            if (
-              results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["label"]
-            ) {
-              resp.label =
-                results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME][
-                  "label"
-                ];
+            if (dbResponse["label"]) {
+              resp.label = dbResponse["label"];
             }
 
-            if (
-              results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["images"][
-                "current_project_labelled_images"
-              ]
-            ) {
+            if (dbResponse["images"]["current_project_labelled_images"]) {
               for (const img of results.rows[0][
                 DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
               ]["images"]["current_project_labelled_images"]) {
@@ -112,11 +102,7 @@ app.get("/captcha", (req, res) => {
               }
             }
 
-            if (
-              results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["images"][
-                "current_project_unlabelled_images"
-              ]
-            ) {
+            if (dbResponse["images"]["current_project_unlabelled_images"]) {
               for (const img of results.rows[0][
                 DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
               ]["images"]["current_project_unlabelled_images"]) {
@@ -129,11 +115,7 @@ app.get("/captcha", (req, res) => {
               }
             }
 
-            if (
-              results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME]["images"][
-                "other_project_images"
-              ]
-            ) {
+            if (dbResponse["images"]["other_project_images"]) {
               for (const img of results.rows[0][
                 DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
               ]["images"]["other_project_images"]) {
@@ -312,25 +294,41 @@ app.get("/projects", (req, res) => {
               DB_FUNCTIONS.GET_PROJECT.FUNCTION_NAME
             )
           ) {
-            if (
-              results.rows[0][DB_FUNCTIONS.GET_PROJECT.FUNCTION_NAME][
-                "error"
-              ] === USER_NOT_PRESENT
-            ) {
+            const dbResponse =
+              results.rows[0][DB_FUNCTIONS.GET_PROJECT.FUNCTION_NAME];
+            if (dbResponse["error"] === USER_NOT_PRESENT) {
               code = FORBIDDEN_ERROR_CODE;
               throw INVALID_WALLET_ID;
-            } else if (
-              results.rows[0][DB_FUNCTIONS.GET_PROJECT.FUNCTION_NAME][
-                "error"
-              ] === PROJECT_NOT_PRESENT
-            ) {
+            } else if (dbResponse["error"] === PROJECT_NOT_PRESENT) {
               code = FORBIDDEN_ERROR_CODE;
               throw PROJECT_NOT_PRESENT;
             }
 
+            let resp = dbResponse;
+
+            if (resp && resp.project) {
+              if (
+                resp.project.labelled_images &&
+                resp.project.labelled_images.length > 0
+              ) {
+                for (const img of resp.project.labelled_images) {
+                  if (img.url) img.url = utils.getImgURL(img.url);
+                }
+              }
+
+              if (
+                resp.project.unlabelled_images &&
+                resp.project.unlabelled_images.length > 0
+              ) {
+                for (const img of resp.project.unlabelled_images) {
+                  if (img.url) img.url = utils.getImgURL(img.url);
+                }
+              }
+            }
+
             res.status(SUCCESS_HTTP_CODE).json({
               ...SUCCESS_RESPONSE,
-              resp: results.rows[0][DB_FUNCTIONS.GET_PROJECT.FUNCTION_NAME],
+              resp,
             });
           } else {
             throw INCORRECT_RESULT_FROM_DB;
@@ -384,18 +382,16 @@ app.post("/project", (req, res) => {
               DB_FUNCTIONS.ADD_PROJECT.FUNCTION_NAME
             )
           ) {
-            if (
-              results.rows[0][DB_FUNCTIONS.ADD_PROJECT.FUNCTION_NAME][
-                "error"
-              ] === USER_NOT_PRESENT
-            ) {
+            const dbResponse =
+              results.rows[0][DB_FUNCTIONS.ADD_PROJECT.FUNCTION_NAME];
+            if (dbResponse["error"] === USER_NOT_PRESENT) {
               code = NOT_FOUND_CODE;
               throw USER_NOT_PRESENT;
             }
 
             res.status(SUCCESS_HTTP_CODE).json({
               ...SUCCESS_RESPONSE,
-              resp: results.rows[0][DB_FUNCTIONS.ADD_PROJECT.FUNCTION_NAME],
+              resp: dbResponse,
             });
           } else {
             throw INCORRECT_RESULT_FROM_DB;
@@ -449,25 +445,19 @@ app.post("/update_project", (req, res) => {
               DB_FUNCTIONS.UPDATE_PROJECT.FUNCTION_NAME
             )
           ) {
-            if (
-              results.rows[0][DB_FUNCTIONS.UPDATE_PROJECT.FUNCTION_NAME][
-                "error"
-              ] === USER_NOT_PRESENT
-            ) {
+            const dbResponse =
+              results.rows[0][DB_FUNCTIONS.UPDATE_PROJECT.FUNCTION_NAME];
+            if (dbResponse["error"] === USER_NOT_PRESENT) {
               code = NOT_FOUND_CODE;
               throw USER_NOT_PRESENT;
-            } else if (
-              results.rows[0][DB_FUNCTIONS.UPDATE_PROJECT.FUNCTION_NAME][
-                "error"
-              ] === PROJECT_NOT_PRESENT
-            ) {
+            } else if (dbResponse["error"] === PROJECT_NOT_PRESENT) {
               code = NOT_FOUND_CODE;
               throw PROJECT_NOT_PRESENT;
             }
 
             res.status(SUCCESS_HTTP_CODE).json({
               ...SUCCESS_RESPONSE,
-              resp: results.rows[0][DB_FUNCTIONS.UPDATE_PROJECT.FUNCTION_NAME],
+              resp: dbResponse,
             });
           } else {
             throw INCORRECT_RESULT_FROM_DB;
@@ -494,12 +484,66 @@ app.post("/update_project", (req, res) => {
 });
 
 /**
- * API to upload images for a project
+ * API to upload labelled images for a project
  * RequstBody: {}
  * Response: {}
  */
-app.put("/upload_images/:project_id", (req, res) => {
-  res.sendStatus(501);
+app.put("/upload_labelled_images/:project_id", (req, res) => {
+  let code;
+  try {
+    if (req && req.query && req.query.wallet_id && req.query.project_id) {
+      pool
+        .query(DB_FUNCTIONS.ADD_IMAGES.QUERY, [
+          req.query.wallet_id.toString(),
+          req.query.project_id.toString(),
+        ])
+        .then((results) => {
+          if (
+            utils.validateDBResponse(
+              results,
+              DB_FUNCTIONS.ADD_IMAGES.FUNCTION_NAME
+            )
+          ) {
+            const dbResponse =
+              results.rows[0][DB_FUNCTIONS.ADD_IMAGES.FUNCTION_NAME];
+            if (dbResponse["error"] === USER_NOT_PRESENT) {
+              code = FORBIDDEN_ERROR_CODE;
+              throw INVALID_WALLET_ID;
+            } else if (dbResponse["error"] === PROJECT_NOT_PRESENT) {
+              code = FORBIDDEN_ERROR_CODE;
+              throw PROJECT_NOT_PRESENT;
+            }
+
+            let resp = results.rows[0][DB_FUNCTIONS.ADD_IMAGES.FUNCTION_NAME];
+
+            // logic to save the images on file storage
+
+            res.status(SUCCESS_HTTP_CODE).json({
+              ...SUCCESS_RESPONSE,
+              resp,
+            });
+          } else {
+            throw INCORRECT_RESULT_FROM_DB;
+          }
+        })
+        .catch((e) => {
+          setImmediate(() => {
+            res.status(code || SERVER_ERROR_CODE).json({
+              ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
+              resp: utils.getAndPrintErrorString(req.url, e),
+            });
+          });
+        });
+    } else {
+      code = BAD_REQ_ERROR_CODE;
+      throw QUERY_PARAM_NOT_PRESENT;
+    }
+  } catch (e) {
+    res.status(code || SERVER_ERROR_CODE).json({
+      ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
+      resp: utils.getAndPrintErrorString(req.url, e),
+    });
+  }
 });
 
 /**
@@ -521,20 +565,16 @@ app.get("/api_key_stats", (req, res) => {
               DB_FUNCTIONS.GET_API_KEY_STATS.FUNCTION_NAME
             )
           ) {
-            if (
-              results.rows[0][DB_FUNCTIONS.GET_API_KEY_STATS.FUNCTION_NAME][
-                "error"
-              ] === USER_NOT_PRESENT
-            ) {
+            const dbResponse =
+              results.rows[0][DB_FUNCTIONS.GET_API_KEY_STATS.FUNCTION_NAME];
+            if (dbResponse["error"] === USER_NOT_PRESENT) {
               code = FORBIDDEN_ERROR_CODE;
               throw INVALID_WALLET_ID;
             }
 
             res.status(SUCCESS_HTTP_CODE).json({
               ...SUCCESS_RESPONSE,
-              resp: results.rows[0][
-                DB_FUNCTIONS.GET_API_KEY_STATS.FUNCTION_NAME
-              ],
+              resp: dbResponse,
             });
           } else {
             throw INCORRECT_RESULT_FROM_DB;

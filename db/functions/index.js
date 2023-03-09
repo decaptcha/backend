@@ -24,6 +24,10 @@ const FUNCTIONS = {
     FUNCTION_NAME: "get_api_key_stats",
     QUERY: "SELECT get_api_key_stats($1)",
   },
+  ADD_IMAGES: {
+    FUNCTION_NAME: "add_images",
+    QUERY: "SELECT add_images($1, $2)",
+  },
 };
 
 module.exports = FUNCTIONS;
