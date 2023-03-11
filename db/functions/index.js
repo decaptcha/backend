@@ -26,7 +26,7 @@ const FUNCTIONS = {
   },
   ADD_IMAGES: {
     FUNCTION_NAME: "add_images",
-    QUERY: "SELECT add_images($1, $2)",
+    QUERY: "SELECT add_images($1, $2, $3, $4)",
   },
 };
 

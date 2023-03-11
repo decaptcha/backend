@@ -105,6 +105,23 @@ const getImgPath = (image_path) => {
 };
 
 /**
+ * Forms an image path where the uploaded image will be stored.
+ * @param {string} imgName
+ * @param {boolean} labelled
+ * @param {string} projectId
+ * @param {string} projectLabel
+ * @returns string
+ */
+const formImgPath = (imgName, labelled, projectId, projectLabel) => {
+  return path.join(
+    storageRootFolder,
+    `${projectId}_${projectLabel}/${
+      labelled ? "labelled" : "unlabelled"
+    }/${imgName}`
+  );
+};
+
+/**
  * Shuffles all the items of an array
  * @param {Array[string]} array - array that needs to be shuffled
  * @returns Array[string]
@@ -201,6 +218,7 @@ module.exports = {
   getImgURL,
   isImgPresent,
   getImgPath,
+  formImgPath,
   shuffleArray,
   validateDBResponse,
   validateProject,

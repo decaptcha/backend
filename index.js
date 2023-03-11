@@ -26,6 +26,7 @@ const {
   USER_NOT_PRESENT,
   IMG_NOT_PRESENT,
   REQUEST_BODY_NOT_PRESENT,
+  ERROR_WHILE_MOVING_IMG_TO_DISK,
   SUCCESS_RESPONSE,
   ERROR_RESPONSE,
 } = require("./constants");
@@ -488,14 +489,51 @@ app.post("/update_project", (req, res) => {
  * RequstBody: {}
  * Response: {}
  */
-app.put("/upload_labelled_images/:project_id", (req, res) => {
+app.put("/upload_images", (req, res) => {
   let code;
   try {
-    if (req && req.query && req.query.wallet_id && req.query.project_id) {
+    if (
+      req &&
+      req.query &&
+      req.query.wallet_id &&
+      req.query.project_id &&
+      req.query.labelled
+    ) {
+      console.log(req.files);
+      if (
+        !req.files ||
+        Object.keys(req.files).length === 0 ||
+        !req.files.images
+      ) {
+        code = BAD_REQ_ERROR_CODE;
+        throw REQUEST_BODY_NOT_PRESENT;
+      }
+
+      const images = [];
+
+      if (Array.isArray(req.files.images)) {
+        for (const file of req.files.images) {
+          console.log("multiple files");
+          console.log(file);
+          images.push({ name: file.name, size: file.size });
+        }
+      } else {
+        console.log("single file");
+        const file = req.files.images;
+        console.log(file);
+        images.push({ name: file.name, size: file.size });
+      }
+
+      console.log(images);
+      const isLabelledUpload =
+        req.query.labelled.toString() === "true" ? true : false;
+
       pool
         .query(DB_FUNCTIONS.ADD_IMAGES.QUERY, [
           req.query.wallet_id.toString(),
           req.query.project_id.toString(),
+          isLabelledUpload.toString(),
+          JSON.stringify(images),
         ])
         .then((results) => {
           if (
@@ -517,6 +555,40 @@ app.put("/upload_labelled_images/:project_id", (req, res) => {
             let resp = results.rows[0][DB_FUNCTIONS.ADD_IMAGES.FUNCTION_NAME];
 
             // logic to save the images on file storage
+            if (resp["message"] !== "Added Images") {
+              throw INCORRECT_RESULT_FROM_DB;
+            }
+
+            const projectLabel = resp["project_label"];
+
+            console.log(resp);
+
+            let files = [];
+            if (Array.isArray(req.files.images)) {
+              console.log("multiple files upload");
+              files = req.files.images;
+            } else {
+              console.log("single file upload");
+              files.push(req.files.images);
+            }
+
+            for (const file of files) {
+              console.log(file);
+              const uploadPath = utils.formImgPath(
+                file.name,
+                isLabelledUpload,
+                req.query.project_id,
+                projectLabel
+              );
+              file.mv(uploadPath, (err) => {
+                if (err) {
+                  throw ERROR_WHILE_MOVING_IMG_TO_DISK;
+                }
+                console.log(
+                  `File: ${file.name} was successfully uploaded on ${uploadPath}`
+                );
+              });
+            }
 
             res.status(SUCCESS_HTTP_CODE).json({
               ...SUCCESS_RESPONSE,

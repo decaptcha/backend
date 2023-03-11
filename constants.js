@@ -25,6 +25,8 @@ const PROJECT_NOT_PRESENT = "Project not present";
 const USER_NOT_PRESENT = "User not present";
 const IMG_NOT_PRESENT = "Image not present";
 const REQUEST_BODY_NOT_PRESENT = "Request body not present";
+const ERROR_WHILE_MOVING_IMG_TO_DISK =
+  "Error Occurred while moving image to disk";
 const SUCCESS_RESPONSE = {
   status: SUCCESS_HTTP_CODE,
   statusMessage: "OK",
@@ -58,6 +60,7 @@ module.exports = {
   USER_NOT_PRESENT,
   IMG_NOT_PRESENT,
   REQUEST_BODY_NOT_PRESENT,
+  ERROR_WHILE_MOVING_IMG_TO_DISK,
   SUCCESS_RESPONSE,
   ERROR_RESPONSE,
   PRIVATE_KEY,
