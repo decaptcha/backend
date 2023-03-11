@@ -6,6 +6,12 @@ const cors = require("cors");
 
 const crypto = require("crypto");
 
+const {
+  getLocalWallet,
+  createNewMint,
+  mintToWallet,
+  transferToken,
+} = require("./cryptoHelper");
 const utils = require("./utils");
 
 const DB_FUNCTIONS = require("./db/functions");
@@ -31,6 +37,7 @@ const {
   ERROR_RESPONSE,
   PROJECT_STARTED_OR_COMPLETED,
 } = require("./constants");
+const { PublicKey } = require("@solana/web3.js");
 
 const app = express();
 // add middlewares to express server
@@ -68,83 +75,109 @@ app.get("/captcha", (req, res) => {
   try {
     if (req && req.query && req.query.api_key) {
       const api_key = req.query.api_key;
-      pool
-        .query(DB_FUNCTIONS.GET_CATPCHA.QUERY, [api_key.toString()])
-        .then((results) => {
-          let resp = { label: null, images: [] };
-
-          if (
-            utils.validateDBResponse(
-              results,
-              DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
-            )
-          ) {
-            const dbResponse =
-              results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME];
-
-            if (dbResponse["error"] === INVALID_API_KEY) {
-              code = FORBIDDEN_ERROR_CODE;
-              throw INVALID_API_KEY;
-            }
-
-            if (dbResponse["label"]) {
-              resp.label = dbResponse["label"];
-            }
-
-            if (dbResponse["images"]["current_project_labelled_images"]) {
-              for (const img of results.rows[0][
-                DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
-              ]["images"]["current_project_labelled_images"]) {
-                resp.images.push({
-                  url: utils.getImgURL(img.url),
-                  id: utils.encryptValue(
-                    `${crypto.randomInt(10000, 99999)}:cpli:${img.id}`
-                  ),
-                });
-              }
-            }
-
-            if (dbResponse["images"]["current_project_unlabelled_images"]) {
-              for (const img of results.rows[0][
-                DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
-              ]["images"]["current_project_unlabelled_images"]) {
-                resp.images.push({
-                  url: utils.getImgURL(img.url),
-                  id: utils.encryptValue(
-                    `${crypto.randomInt(10000, 99999)}:cpui:${img.id}`
-                  ),
-                });
-              }
-            }
-
-            if (dbResponse["images"]["other_project_images"]) {
-              for (const img of results.rows[0][
-                DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
-              ]["images"]["other_project_images"]) {
-                resp.images.push({
-                  url: utils.getImgURL(img.url),
-                  id: utils.encryptValue(
-                    `${crypto.randomInt(10000, 99999)}:opi:${img.id}`
-                  ),
-                });
-              }
-            }
-          } else {
-            throw INCORRECT_RESULT_FROM_DB;
-          }
-
-          resp.images = utils.shuffleArray(resp.images);
-
-          res.status(SUCCESS_HTTP_CODE).json({ ...SUCCESS_RESPONSE, resp });
-        })
-        .catch((e) => {
-          setImmediate(() => {
-            res.status(code || SERVER_ERROR_CODE).json({
-              ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
-              resp: utils.getAndPrintErrorString(req.url, e),
-            });
+      const cryptoStuff = async () => {
+        try {
+          // Query the image count and then based on that create number of images
+          const imageCount = 100;
+          const localWallet = getLocalWallet();
+          const mint = await createNewMint(localWallet);
+          const signature = await mintToWallet(localWallet, mint, imageCount);
+          return {
+            signature: signature,
+            message: `Created mint with txid ${signature}`,
+            mint: mint.toString(),
+          };
+        } catch (error) {
+          throw new Error({
+            signature: null,
+            message: error.message,
+            mint: null,
           });
-        });
+        }
+      };
+
+      cryptoStuff()
+        .then(() => {
+          // Transfer function
+          pool
+            .query(DB_FUNCTIONS.GET_CATPCHA.QUERY, [api_key.toString()])
+            .then((results) => {
+              let resp = { label: null, images: [] };
+
+              if (
+                utils.validateDBResponse(
+                  results,
+                  DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
+                )
+              ) {
+                const dbResponse =
+                  results.rows[0][DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME];
+
+                if (dbResponse["error"] === INVALID_API_KEY) {
+                  code = FORBIDDEN_ERROR_CODE;
+                  throw INVALID_API_KEY;
+                }
+
+                if (dbResponse["label"]) {
+                  resp.label = dbResponse["label"];
+                }
+
+                if (dbResponse["images"]["current_project_labelled_images"]) {
+                  for (const img of results.rows[0][
+                    DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
+                  ]["images"]["current_project_labelled_images"]) {
+                    resp.images.push({
+                      url: utils.getImgURL(img.url),
+                      id: utils.encryptValue(
+                        `${crypto.randomInt(10000, 99999)}:cpli:${img.id}`
+                      ),
+                    });
+                  }
+                }
+
+                if (dbResponse["images"]["current_project_unlabelled_images"]) {
+                  for (const img of results.rows[0][
+                    DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
+                  ]["images"]["current_project_unlabelled_images"]) {
+                    resp.images.push({
+                      url: utils.getImgURL(img.url),
+                      id: utils.encryptValue(
+                        `${crypto.randomInt(10000, 99999)}:cpui:${img.id}`
+                      ),
+                    });
+                  }
+                }
+
+                if (dbResponse["images"]["other_project_images"]) {
+                  for (const img of results.rows[0][
+                    DB_FUNCTIONS.GET_CATPCHA.FUNCTION_NAME
+                  ]["images"]["other_project_images"]) {
+                    resp.images.push({
+                      url: utils.getImgURL(img.url),
+                      id: utils.encryptValue(
+                        `${crypto.randomInt(10000, 99999)}:opi:${img.id}`
+                      ),
+                    });
+                  }
+                }
+              } else {
+                throw INCORRECT_RESULT_FROM_DB;
+              }
+
+              resp.images = utils.shuffleArray(resp.images);
+
+              res.status(SUCCESS_HTTP_CODE).json({ ...SUCCESS_RESPONSE, resp });
+            })
+            .catch((e) => {
+              setImmediate(() => {
+                res.status(code || SERVER_ERROR_CODE).json({
+                  ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
+                  resp: utils.getAndPrintErrorString(req.url, e),
+                });
+              });
+            });
+        })
+        .catch(() => {});
     } else {
       code = BAD_REQ_ERROR_CODE;
       throw QUERY_PARAM_NOT_PRESENT;
@@ -446,40 +479,69 @@ app.post("/update_project", (req, res) => {
         throw validationMessage;
       }
 
-      pool
-        .query(DB_FUNCTIONS.UPDATE_PROJECT.QUERY, [JSON.stringify(project)])
-        .then((results) => {
-          if (
-            utils.validateDBResponse(
-              results,
-              DB_FUNCTIONS.UPDATE_PROJECT.FUNCTION_NAME
-            )
-          ) {
-            const dbResponse =
-              results.rows[0][DB_FUNCTIONS.UPDATE_PROJECT.FUNCTION_NAME];
-            if (dbResponse["error"] === USER_NOT_PRESENT) {
-              code = NOT_FOUND_CODE;
-              throw USER_NOT_PRESENT;
-            } else if (dbResponse["error"] === PROJECT_NOT_PRESENT) {
-              code = NOT_FOUND_CODE;
-              throw PROJECT_NOT_PRESENT;
-            }
-
-            res.status(SUCCESS_HTTP_CODE).json({
-              ...SUCCESS_RESPONSE,
-              resp: dbResponse,
-            });
-          } else {
-            throw INCORRECT_RESULT_FROM_DB;
-          }
-        })
-        .catch((e) => {
-          setImmediate(() => {
-            res.status(code || SERVER_ERROR_CODE).json({
-              ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
-              resp: utils.getAndPrintErrorString(req.url, e),
-            });
+      const cryptoStuff = async () => {
+        try {
+          const amountToBeTransferred = '' // TODO: get the amount to be transferred
+          const localWallet = getLocalWallet();
+          const receiverWalletAddress = ''; // TODO: query receiver's wallet address
+          const receiverWallet = new PublicKey(receiverWalletAddress);
+          const mint = new PublicKey('5H2hFWuXa5yrB7CMLhhJmAzAMY714v2owG1LEsZeJxEU') // TODO: query the token mint address from the project table
+          const signature = await transferToken(localWallet, receiverWallet, mint, amountToBeTransferred);
+          return {
+            signature: signature,
+            message: `Transferred tokens with txid ${signature}`,
+          };
+        } catch (error) {
+          throw new Error({
+            signature: null,
+            message: error.message,
+            mint: null,
           });
+        }
+      };
+
+      cryptoStuff()
+        .then((response) => {
+          // TODO save the signature and mint, and in case of error do not execute the pool query
+          // Mint will be stored in DB
+          pool
+            .query(DB_FUNCTIONS.UPDATE_PROJECT.QUERY, [JSON.stringify(project)])
+            .then((results) => {
+              if (
+                utils.validateDBResponse(
+                  results,
+                  DB_FUNCTIONS.UPDATE_PROJECT.FUNCTION_NAME
+                )
+              ) {
+                const dbResponse =
+                  results.rows[0][DB_FUNCTIONS.UPDATE_PROJECT.FUNCTION_NAME];
+                if (dbResponse["error"] === USER_NOT_PRESENT) {
+                  code = NOT_FOUND_CODE;
+                  throw USER_NOT_PRESENT;
+                } else if (dbResponse["error"] === PROJECT_NOT_PRESENT) {
+                  code = NOT_FOUND_CODE;
+                  throw PROJECT_NOT_PRESENT;
+                }
+
+                res.status(SUCCESS_HTTP_CODE).json({
+                  ...SUCCESS_RESPONSE,
+                  resp: dbResponse,
+                });
+              } else {
+                throw INCORRECT_RESULT_FROM_DB;
+              }
+            })
+            .catch((e) => {
+              setImmediate(() => {
+                res.status(code || SERVER_ERROR_CODE).json({
+                  ...ERROR_RESPONSE(code || SERVER_ERROR_CODE),
+                  resp: utils.getAndPrintErrorString(req.url, e),
+                });
+              });
+            });
+        })
+        .catch(() => {
+          // Send the error in response to frontend
         });
     } else {
       code = BAD_REQ_ERROR_CODE;

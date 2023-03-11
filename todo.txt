@@ -1,0 +1,10 @@
+// TODO: Create Transactions table
+
+Example : 
+|project_id| tx_id | from_wallet_address | to_wallet_address|
+| 1        |some-id|  sdfdsfsd3423       | sdfsew43543      |
+
+
+// TODO: Add min in projects table
+
+
