@@ -1,0 +1,1302 @@
+--
+-- PostgreSQL database dump
+--
+
+-- Dumped from database version 14.6 (Homebrew)
+-- Dumped by pg_dump version 15.1
+
+-- Started on 2023-03-11 19:06:21 IST
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- TOC entry 5 (class 2615 OID 2200)
+-- Name: public; Type: SCHEMA; Schema: -; Owner: pranav
+--
+
+CREATE SCHEMA public;
+
+
+ALTER SCHEMA public OWNER TO pranav;
+
+--
+-- TOC entry 3689 (class 0 OID 0)
+-- Dependencies: 5
+-- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: pranav
+--
+
+COMMENT ON SCHEMA public IS 'standard public schema';
+
+
+--
+-- TOC entry 248 (class 1255 OID 16560)
+-- Name: add_images(text, uuid, boolean, json); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.add_images(arg_wallet_id text, arg_project_id uuid, arg_is_labelled boolean, arg_images json) RETURNS json
+    LANGUAGE plpgsql
+    AS $$DECLARE
+current_user_id int;
+current_project_label_value text;
+project_status int;
+i json;
+response json;
+
+BEGIN
+	-- select the user
+	SELECT 
+		id INTO current_user_id 
+	FROM 
+		users 
+	WHERE 
+		wallet_id = arg_wallet_id;
+		
+	IF current_user_id IS NULL THEN
+		response := jsonb_build_object('error', 'User not present');
+		RETURN response;
+	END IF;
+	
+	IF NOT EXISTS(SELECT id FROM projects WHERE id = arg_project_id) THEN
+		response := jsonb_build_object('error', 'Project not present');
+		RETURN response;
+	END IF;
+	
+	SELECT status INTO project_status FROM projects WHERE id = arg_project_id;
+	
+	IF project_status != 1 THEN
+		response := jsonb_build_object('error', 'Project has been started or completed');
+		RETURN response;
+	END IF;
+	
+	SELECT label_value INTO current_project_label_value FROM projects WHERE id = arg_project_id;
+	
+	FOR i IN SELECT * FROM json_array_elements(arg_images)
+	LOOP
+		IF arg_is_labelled = true THEN
+			INSERT INTO images 
+				(user_id, 
+				 project_id, 
+				 labelled, 
+				 shown_to_users, 
+				 clicks, 
+				 url,
+				 size,
+				 active, 
+				 created_at, 
+				 updated_at, 
+				 name) 
+			VALUES 
+				(current_user_id, 
+				 arg_project_id, 
+				 arg_is_labelled, 
+				 0, 
+				 0,
+				 CONCAT('file://', (arg_project_id)::text, '_', current_project_label_value, '/labelled/', i->>'name'),
+				 i->>'size',
+				 false,
+				 NOW(),
+				 NOW(),
+				 i->>'name');
+		ELSE
+			INSERT INTO images 
+				(user_id, 
+				 project_id, 
+				 labelled, 
+				 shown_to_users, 
+				 clicks, 
+				 url,
+				 size,
+				 active, 
+				 created_at, 
+				 updated_at, 
+				 name) 
+			VALUES 
+				(current_user_id, 
+				 arg_project_id, 
+				 arg_is_labelled, 
+				 0, 
+				 0,
+				 CONCAT('file://', (arg_project_id)::text, '_', current_project_label_value, '/labelled/', i->>'name'),
+				 i->>'size',
+				 false,
+				 NOW(),
+				 NOW(),
+				 i->>'name');
+		END IF;
+	END LOOP;
+	
+	response := jsonb_build_object('message', 'Added Images', 'project_label', current_project_label_value);
+
+	RETURN response;
+END;
+$$;
+
+
+ALTER FUNCTION public.add_images(arg_wallet_id text, arg_project_id uuid, arg_is_labelled boolean, arg_images json) OWNER TO postgres;
+
+--
+-- TOC entry 247 (class 1255 OID 16556)
+-- Name: add_project(json); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.add_project(arg_project_details json) RETURNS json
+    LANGUAGE plpgsql
+    AS $$DECLARE
+current_user_id int;
+new_project_uuid uuid;
+response json;
+
+BEGIN
+
+	IF NOT EXISTS(SELECT wallet_id FROM users WHERE wallet_id = arg_project_details->>'wallet_id') THEN
+		response := jsonb_build_object('error', 'User not present');
+		RETURN response;
+	ELSE
+		SELECT id into current_user_id FROM users WHERE wallet_id = arg_project_details->>'wallet_id';
+	END IF;
+	
+	SELECT uuid_generate_v4() into new_project_uuid;
+	
+	INSERT INTO projects 
+		(id, 
+		 user_id, 
+		 name, 
+		 label_value, 
+		 active, 
+		 created_at, 
+		 updated_at, 
+		 threshold, 
+		 expiry, 
+		 description,
+		 token_multiplier
+		) 
+	VALUES
+		(new_project_uuid,
+		 current_user_id, 
+		 arg_project_details->>'name', 
+		 arg_project_details->>'label_value', 
+		 false, 
+		 NOW(), 
+		 NOW(), 
+		 (arg_project_details->>'threshold')::numeric,
+		 TO_TIMESTAMP((arg_project_details->>'expiry'), 'YYYY-MM-DD HH:MI:SS'),
+		 arg_project_details->>'description',
+		 arg_project_details->>'token_multiplier'
+		);
+	 
+	response := jsonb_build_object('project_id', new_project_uuid);
+	RETURN response;
+
+RETURN response;
+END;$$;
+
+
+ALTER FUNCTION public.add_project(arg_project_details json) OWNER TO postgres;
+
+--
+-- TOC entry 246 (class 1255 OID 16557)
+-- Name: get_api_key_stats(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.get_api_key_stats(arg_wallet_id text) RETURNS json
+    LANGUAGE plpgsql
+    AS $$DECLARE
+current_user_id int;
+api_key_object json;
+response json;
+
+BEGIN
+	-- select the user
+	SELECT 
+		id INTO current_user_id 
+	FROM 
+		users 
+	WHERE 
+		wallet_id = arg_wallet_id;
+		
+	IF current_user_id IS NULL THEN
+		response := jsonb_build_object('error', 'User not present');
+		RETURN response;
+	END IF;
+	
+	SELECT to_json(
+		(
+			SELECT d FROM (
+				SELECT 
+					api_key, usage, active, created_at, updated_at
+				FROM
+					api_keys
+				WHERE
+					user_id = current_user_id
+			) d
+		)
+	) INTO api_key_object;
+	
+	response := jsonb_build_object(
+			'wallet_id', arg_wallet_id,
+			'api_key', api_key_object
+		);
+		
+	RETURN response;
+END;$$;
+
+
+ALTER FUNCTION public.get_api_key_stats(arg_wallet_id text) OWNER TO postgres;
+
+--
+-- TOC entry 245 (class 1255 OID 16555)
+-- Name: get_captcha(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.get_captcha(arg_api_key text) RETURNS json
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+current_random_project_id uuid;
+current_project_label text;
+labelled_images_limit int;
+unlabelled_images_limit int;
+current_project_labelled_images json;
+current_project_unlabelled_images json;
+other_project_images json;
+images json;
+response json;
+
+BEGIN
+	IF NOT EXISTS(SELECT api_key FROM api_keys WHERE api_key = arg_api_key) THEN
+		response := jsonb_build_object('error', 'Invalid API Key');
+		RETURN response;
+	END IF;
+
+	-- select a random active project
+	SELECT 
+		id INTO current_random_project_id 
+	FROM 
+		projects 
+	WHERE 
+		status = 2
+	ORDER BY 
+		random() 
+	LIMIT 1;
+
+	-- set current_project_label
+	SELECT label_value into current_project_label FROM projects WHERE id = current_random_project_id;
+
+	-- set limits for labelled_images_limit
+	SELECT floor(random() * (2+1) + 2)::int INTO labelled_images_limit;
+	-- unlabelled_images_limit will (6 - labelled_images_limit)
+	SELECT (6 - labelled_images_limit) INTO unlabelled_images_limit;
+
+	-- select labelled_images_limit number of images that will be used for auth
+	SELECT 
+		json_agg(t) INTO current_project_labelled_images
+	FROM (
+		SELECT 
+			id, name, url
+		FROM 
+			images 
+		WHERE 
+-- 			active = true
+-- 			AND
+			labelled = true
+			AND
+			project_id = current_random_project_id
+		ORDER BY 
+			random() 
+		LIMIT labelled_images_limit
+	) as t;
+
+	-- select unlabelled_images_limit number of images that will be used for labelling info from users
+	SELECT 
+		json_agg(t) INTO current_project_unlabelled_images
+	FROM (
+		SELECT 
+			id, name, url
+		FROM 
+			images 
+		WHERE 
+-- 			active = true
+-- 			AND
+			labelled = false
+			AND
+			project_id = current_random_project_id
+		ORDER BY 
+			random() 
+		LIMIT unlabelled_images_limit
+	) as t;
+
+	-- select 6 random images from other projects
+	SELECT 
+		json_agg(t) INTO other_project_images
+	FROM (
+		SELECT 
+			id, name, url
+		FROM 
+			images 
+		WHERE 
+-- 			active = true
+-- 			AND
+			project_id in (SELECT id FROM projects WHERE status = 2 AND project_id != current_random_project_id ORDER BY random())
+		ORDER BY 
+			random() 
+		LIMIT 6 -- this is harcoded 6
+	) as t;
+
+	SELECT 
+		to_json(t) INTO images 
+	FROM (
+		SELECT 
+			current_project_labelled_images,
+			current_project_unlabelled_images,
+			other_project_images
+	) as t;
+	
+	response := jsonb_build_object(
+		'label', current_project_label,
+		'images', images
+	);
+
+	RETURN response;
+END;
+$$;
+
+
+ALTER FUNCTION public.get_captcha(arg_api_key text) OWNER TO postgres;
+
+--
+-- TOC entry 249 (class 1255 OID 16553)
+-- Name: get_project(text, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.get_project(arg_wallet_id text, arg_project_id uuid DEFAULT NULL::uuid) RETURNS json
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+current_user_id int;
+user_projects json;
+user_api_key text;
+response json;
+
+BEGIN
+	-- select the user
+	SELECT 
+		id, api_key INTO current_user_id, user_api_key
+	FROM 
+		users 
+	WHERE 
+		wallet_id = arg_wallet_id;
+	
+	IF arg_project_id IS NULL THEN
+		IF current_user_id IS NULL THEN
+			SELECT uuid_generate_v4() into user_api_key;
+
+			INSERT INTO users
+				(user_type_id,
+				 group_id,
+				 api_key,
+				 active,
+				 created_at,
+				 updated_at,
+				 wallet_id
+				)
+			VALUES
+				(
+					2,
+					2,
+					user_api_key::text,
+					true,
+					NOW(),
+					NOW(),
+					arg_wallet_id
+				);
+
+			SELECT 
+				id INTO current_user_id 
+			FROM 
+				users 
+			WHERE 
+				wallet_id = arg_wallet_id;
+
+			INSERT INTO api_keys
+				(
+					user_id,
+					api_key,
+					usage,
+					active,
+					created_at,
+					updated_at
+				)
+			VALUES
+				(
+					current_user_id,
+					user_api_key::text,
+					0,
+					true,
+					NOW(),
+					NOW()
+				);
+		END IF;
+	
+	
+		-- select all the user's projects
+		SELECT 
+			json_agg(t) into user_projects
+		FROM (
+			SELECT
+				id, 
+				name, 
+				active, 
+				created_at, 
+				updated_at, 
+				threshold, 
+				description, 
+				label_value, 
+				(SELECT status FROM project_status WHERE id = p.status)
+			FROM
+				projects as p
+			WHERE
+				user_id = current_user_id
+			ORDER BY
+				created_at DESC
+		) as t;
+		
+		response := jsonb_build_object(
+			'wallet_id', arg_wallet_id,
+			'api_key', user_api_key,
+			'projects', user_projects,
+			'active_projects', (SELECT COUNT(*) FROM projects WHERE status = 2 AND user_id = current_user_id),
+			'inactive_projects', (SELECT COUNT(*) FROM projects WHERE status in (1,3) AND user_id = current_user_id)
+		);
+	ELSE
+	
+		IF current_user_id IS NULL THEN
+			response := jsonb_build_object('error', 'User not present');
+			RETURN response;
+		END IF;
+	
+		IF NOT EXISTS(SELECT id FROM projects WHERE id = arg_project_id) THEN
+			response := jsonb_build_object('error', 'Project not present');
+			RETURN response;
+		END IF;
+	
+		-- select only the selected project of the user
+		SELECT to_json(
+			(SELECT d FROM
+				(SELECT
+					id, name, active, created_at, updated_at, expiry, threshold, description, label_value, tokens_minted, tokens_remaining, token_multiplier, (SELECT status FROM project_status WHERE id = p.status),
+					(
+						SELECT
+							json_agg(t) 
+						FROM (
+							SELECT
+								id, project_id, shown_to_users, clicks, url, active, created_at, updated_at, name, size
+							FROM
+								images
+							WHERE
+								project_id = arg_project_id
+								AND
+								user_id = current_user_id
+								AND
+								labelled = true
+						) as t
+					) as labelled_images,
+					(
+						SELECT
+							json_agg(t) 
+						FROM (
+							SELECT
+								id, project_id, shown_to_users, clicks, ROUND(((clicks * 100)::numeric/NULLIF(shown_to_users::numeric, 0)), 2) as image_confidence,  url, active, created_at, updated_at, name, size
+							FROM
+								images
+							WHERE
+								project_id = arg_project_id
+								AND
+								user_id = current_user_id
+								AND
+								labelled = false
+						) as t
+					) as unlabelled_images
+				FROM
+					projects as p
+				WHERE
+					user_id = current_user_id
+					AND
+					id = arg_project_id
+				) d
+			)
+		) into user_projects;
+		
+		response := jsonb_build_object(
+			'wallet_id', arg_wallet_id,
+			'api_key', user_api_key,
+			'project', user_projects
+		);
+	END IF;
+		
+	RETURN response;
+END;
+$$;
+
+
+ALTER FUNCTION public.get_project(arg_wallet_id text, arg_project_id uuid) OWNER TO postgres;
+
+--
+-- TOC entry 244 (class 1255 OID 16554)
+-- Name: post_captcha(json, integer, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.post_captcha(arg_unlabelled_images json, arg_number_of_unlabelled_images integer, arg_api_key text) RETURNS json
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+i json;
+current_shown_to_users bigint;
+current_clicks bigint;
+number_of_tokens_remaining bigint;
+image_project_id uuid;
+response json;
+
+BEGIN
+	IF NOT EXISTS(SELECT api_key FROM api_keys WHERE api_key = arg_api_key) THEN
+		response := jsonb_build_object('error', 'Invalid API Key');
+		RETURN response;
+	ELSE
+		UPDATE api_keys
+		SET usage = (usage + arg_number_of_unlabelled_images), updated_at = NOW()
+		WHERE api_key = arg_api_key;
+	END IF;
+
+	FOR i IN SELECT * FROM json_array_elements(arg_unlabelled_images)
+	LOOP
+		SELECT shown_to_users INTO current_shown_to_users FROM images WHERE id = uuid(i->>'id');
+		SELECT project_id INTO image_project_id FROM images WHERE id = uuid(i->>'id');
+		
+		SELECT tokens_remaining INTO number_of_tokens_remaining FROM projects WHERE id = image_project_id;
+		
+		IF number_of_tokens_remaining > 1 THEN
+			UPDATE projects
+			SET tokens_remaining=(tokens_remaining-1)
+			WHERE id = image_project_id;
+		ELSE
+			UPDATE projects
+			SET status=3
+			WHERE id = image_project_id;
+		END IF;
+
+		IF i->>'selected' = 'true' THEN
+			SELECT clicks INTO current_clicks FROM images WHERE id = uuid(i->>'id');
+
+			UPDATE images
+			SET 
+				shown_to_users = (current_shown_to_users + 1),
+				clicks = (current_clicks + 1),
+				updated_at = NOW()
+			WHERE id = uuid(i->>'id');
+		ELSE
+			UPDATE images
+			SET 
+				shown_to_users = (current_shown_to_users + 1),
+				updated_at = NOW()
+			WHERE id = uuid(i->>'id');
+		END IF;
+	END LOOP;
+	
+	response := to_json('{"message": "Operation Done"}'::text);
+RETURN response;
+END;
+$$;
+
+
+ALTER FUNCTION public.post_captcha(arg_unlabelled_images json, arg_number_of_unlabelled_images integer, arg_api_key text) OWNER TO postgres;
+
+--
+-- TOC entry 250 (class 1255 OID 16559)
+-- Name: update_project(json); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.update_project(arg_project_details json) RETURNS json
+    LANGUAGE plpgsql
+    AS $$DECLARE
+current_user_id int;
+current_project_status int;
+number_of_images bigint;
+number_of_tokens bigint;
+response json;
+
+BEGIN
+
+	IF NOT EXISTS(SELECT wallet_id FROM users WHERE wallet_id = arg_project_details->>'wallet_id') THEN
+		response := jsonb_build_object('error', 'User not present');
+		RETURN response;
+	ELSE
+		SELECT id into current_user_id FROM users WHERE wallet_id = arg_project_details->>'wallet_id';
+	END IF;
+	
+	IF NOT EXISTS(SELECT id FROM projects WHERE id = (arg_project_details->>'id')::uuid) THEN
+		response := jsonb_build_object('error', 'Project not present');
+		RETURN response;
+	END IF;
+	
+	SELECT status into current_project_status FROM projects WHERE id = (arg_project_details->>'id')::uuid;
+	
+	IF current_project_status = 1 AND (arg_project_details->>'active')::boolean = true THEN
+		SELECT COUNT(*) into number_of_images FROM images WHERE labelled=false AND project_id = (arg_project_details->>'id')::uuid;
+		SELECT (number_of_images * 10) INTO number_of_tokens;
+		
+		UPDATE projects
+		SET 
+			tokens_minted = number_of_tokens::bigint,
+			tokens_remaining = number_of_tokens::bigint,
+			status = 2
+		WHERE
+			id = (arg_project_details->>'id')::uuid;
+	END IF;
+	
+	UPDATE projects
+	SET 
+		name = arg_project_details->>'name',
+		label_value = arg_project_details->>'label_value',
+		active = (arg_project_details->>'active')::boolean,
+		updated_at = NOW(),
+		threshold = (arg_project_details->>'threshold')::numeric,
+		expiry = TO_TIMESTAMP((arg_project_details->>'expiry'), 'YYYY-MM-DD HH:MI:SS')
+	WHERE
+		id = (arg_project_details->>'id')::uuid;
+	 
+	response := jsonb_build_object('project_id', arg_project_details->>'id');
+	RETURN response;
+END;$$;
+
+
+ALTER FUNCTION public.update_project(arg_project_details json) OWNER TO postgres;
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- TOC entry 217 (class 1259 OID 16442)
+-- Name: api_keys; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.api_keys (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id integer NOT NULL,
+    api_key text NOT NULL,
+    usage bigint NOT NULL,
+    active boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone
+);
+
+
+ALTER TABLE public.api_keys OWNER TO postgres;
+
+--
+-- TOC entry 216 (class 1259 OID 16441)
+-- Name: api_keys_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.api_keys_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.api_keys_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 3691 (class 0 OID 0)
+-- Dependencies: 216
+-- Name: api_keys_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.api_keys_id_seq OWNED BY public.api_keys.id;
+
+
+--
+-- TOC entry 215 (class 1259 OID 16422)
+-- Name: images; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.images (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id integer NOT NULL,
+    project_id uuid NOT NULL,
+    labelled boolean NOT NULL,
+    shown_to_users bigint NOT NULL,
+    clicks bigint NOT NULL,
+    url text NOT NULL,
+    size text,
+    active boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    name text NOT NULL
+);
+
+
+ALTER TABLE public.images OWNER TO postgres;
+
+--
+-- TOC entry 214 (class 1259 OID 16421)
+-- Name: images_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.images_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.images_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 3692 (class 0 OID 0)
+-- Dependencies: 214
+-- Name: images_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.images_id_seq OWNED BY public.images.id;
+
+
+--
+-- TOC entry 220 (class 1259 OID 16564)
+-- Name: number_of_images; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.number_of_images (
+    count bigint
+);
+
+
+ALTER TABLE public.number_of_images OWNER TO postgres;
+
+--
+-- TOC entry 222 (class 1259 OID 16568)
+-- Name: project_status; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.project_status (
+    id integer NOT NULL,
+    status text NOT NULL
+);
+
+
+ALTER TABLE public.project_status OWNER TO postgres;
+
+--
+-- TOC entry 221 (class 1259 OID 16567)
+-- Name: project_status_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.project_status_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.project_status_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 3693 (class 0 OID 0)
+-- Dependencies: 221
+-- Name: project_status_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.project_status_id_seq OWNED BY public.project_status.id;
+
+
+--
+-- TOC entry 213 (class 1259 OID 16407)
+-- Name: projects; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.projects (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id integer NOT NULL,
+    name text NOT NULL,
+    label_value text NOT NULL,
+    active boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    threshold numeric,
+    expiry timestamp with time zone,
+    description text,
+    tokens_minted bigint DEFAULT 0,
+    tokens_remaining bigint DEFAULT 0,
+    token_multiplier integer DEFAULT 10,
+    status integer DEFAULT 1 NOT NULL
+);
+
+
+ALTER TABLE public.projects OWNER TO postgres;
+
+--
+-- TOC entry 212 (class 1259 OID 16406)
+-- Name: projects_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.projects_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.projects_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 3694 (class 0 OID 0)
+-- Dependencies: 212
+-- Name: projects_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.projects_id_seq OWNED BY public.projects.id;
+
+
+--
+-- TOC entry 219 (class 1259 OID 16457)
+-- Name: user_type; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.user_type (
+    id integer NOT NULL,
+    description text,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone
+);
+
+
+ALTER TABLE public.user_type OWNER TO postgres;
+
+--
+-- TOC entry 218 (class 1259 OID 16456)
+-- Name: user_type_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.user_type_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.user_type_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 3695 (class 0 OID 0)
+-- Dependencies: 218
+-- Name: user_type_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.user_type_id_seq OWNED BY public.user_type.id;
+
+
+--
+-- TOC entry 210 (class 1259 OID 16393)
+-- Name: users_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.users_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.users_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 211 (class 1259 OID 16394)
+-- Name: users; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.users (
+    id integer DEFAULT nextval('public.users_id_seq'::regclass) NOT NULL,
+    user_type_id integer NOT NULL,
+    group_id integer,
+    name text,
+    api_key text NOT NULL,
+    active boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    wallet_id text DEFAULT ''::text NOT NULL
+);
+
+
+ALTER TABLE public.users OWNER TO postgres;
+
+--
+-- TOC entry 3513 (class 2604 OID 16571)
+-- Name: project_status id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_status ALTER COLUMN id SET DEFAULT nextval('public.project_status_id_seq'::regclass);
+
+
+--
+-- TOC entry 3512 (class 2604 OID 16460)
+-- Name: user_type id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_type ALTER COLUMN id SET DEFAULT nextval('public.user_type_id_seq'::regclass);
+
+
+--
+-- TOC entry 3678 (class 0 OID 16442)
+-- Dependencies: 217
+-- Data for Name: api_keys; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.api_keys (id, user_id, api_key, usage, active, created_at, updated_at) FROM stdin;
+a6d20263-f1e9-4b14-b29b-ed54cf993643	2	b8a09ee5-3136-4123-ad69-fec102ebe66d	0	t	2023-03-05 11:40:52.956874+05:30	2023-03-05 11:40:52.956874+05:30
+bc22e740-d46d-4c36-8d99-5d1cc2b2a713	3	fe09270c-d902-4915-8282-53397f2953de	0	t	2023-03-05 11:40:52.956874+05:30	2023-03-05 11:40:52.956874+05:30
+de2e1d0f-f73e-4e25-83cf-c188f4bc12b4	4	404fd64c-f61b-4bbc-82bb-ac5a8b5c5a58	0	t	2023-03-05 11:40:52.956874+05:30	2023-03-05 11:40:52.956874+05:30
+2b78fcd3-6d97-4274-9321-6f0e86df8db9	1	920310e1-eb98-4cbf-bfa1-97c90e8baf44	19	t	2023-03-05 11:40:52.956874+05:30	2023-03-07 19:06:18.649186+05:30
+81973213-1e25-4192-9392-862800f92b2e	6	7de0a9e1-2586-4ca4-9fea-4a05edfe1b2a	0	t	2023-03-11 09:37:51.683073+05:30	2023-03-11 09:37:51.683073+05:30
+4037e137-5dba-4d8c-93ea-9c250fbf4b23	7	97fb8f01-a7ab-429d-bf94-261c5dc3752a	0	t	2023-03-11 09:40:05.058161+05:30	2023-03-11 09:40:05.058161+05:30
+586ffdf7-e2ec-4b79-a437-42efe7aeb96e	8	74fdaf6d-30f7-4933-a83b-d2b8793be465	0	t	2023-03-11 10:04:33.377561+05:30	2023-03-11 10:04:33.377561+05:30
+a4ea441d-7aba-443e-9457-7d94bf95b97e	9	08b36656-b362-40e9-bf0b-337c9fdb33f4	0	t	2023-03-11 11:46:44.097417+05:30	2023-03-11 11:46:44.097417+05:30
+a10d8b90-8b6a-4e99-acf9-e408fe6eab1f	10	5d5e1920-f0de-418c-b6f1-d17c69ac1953	0	t	2023-03-11 11:47:32.894009+05:30	2023-03-11 11:47:32.894009+05:30
+0bc828a0-d67e-4631-b87a-81e5528e65f6	11	435c2f37-2ca4-4c2f-bebe-645b33f14a83	0	t	2023-03-11 11:49:34.434657+05:30	2023-03-11 11:49:34.434657+05:30
+\.
+
+
+--
+-- TOC entry 3676 (class 0 OID 16422)
+-- Dependencies: 215
+-- Data for Name: images; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.images (id, user_id, project_id, labelled, shown_to_users, clicks, url, size, active, created_at, updated_at, name) FROM stdin;
+eadea483-ddc1-4d5f-943c-4bd6f7ff369a	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	t	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/image-2.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-2.jpg
+59cdebf4-4069-4d3f-8aa5-81db29963393	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	t	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/image-3.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-3.jpg
+bb839863-7e7c-4b05-91e1-a7c4208436be	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	t	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/image-4.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-4.jpg
+ea81561f-8ad6-4ae8-848f-f19aaec5492e	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	t	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/image-5.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-5.jpg
+0df0664f-f6df-4f0a-b213-58d88c593372	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	t	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/labelled/image-1.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-1.jpg
+66d16ce5-3760-4585-9c6f-1dc37b5280b5	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	t	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/labelled/image-2.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-2.jpg
+d5a23d01-89c6-4303-9167-340215496496	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	t	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/labelled/image-3.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-3.jpg
+26ea0aaa-dc4f-4117-ac2f-62691b6670ec	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	t	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/labelled/image-4.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-4.jpg
+0bdd1e49-dd11-4c32-baf3-ee7b0042df7e	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	t	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/labelled/image-5.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-05 12:16:41.172519+05:30	image-5.jpg
+515efac9-0466-4b1f-9ed0-668aaab60879	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	f	27	11	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/unlabelled/image-11.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-11.jpg
+7ea0c790-3f80-4061-a833-6ac609f113cd	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	f	33	14	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/unlabelled/image-12.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-07 19:02:38.860876+05:30	image-12.jpg
+dd5daab9-b529-4f5a-9f0b-af41b6e42de4	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	f	29	9	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/unlabelled/image-8.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-07 19:02:38.860876+05:30	image-8.jpg
+bafe28e3-ab09-48c9-99f1-8fb6b6c748c9	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	f	41	21	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/unlabelled/image-6.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-07 19:02:38.860876+05:30	image-6.jpg
+be47683e-e76b-4aba-93e7-e1b559a0bf14	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	t	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/image-1.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-1.jpg
+c129c553-bdde-48f5-8766-379b9a805650	1	fc84183b-e344-4d14-9ee8-26938292e1e8	f	0	0	file://fc84183b-e344-4d14-9ee8-26938292e1e8_space2/labelled/image-1.jpg	\N	f	2023-03-09 13:35:14.652974+05:30	2023-03-09 13:35:14.652974+05:30	image-1.jpg
+6870ec3d-9826-46df-9ae8-e6d8942e13dd	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	f	29	21	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/unlabelled/image-11.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-07 19:06:02.167243+05:30	image-11.jpg
+94a31df3-d8f3-45c8-b6b9-c49537680986	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	f	35	10	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/unlabelled/image-10.png	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-07 19:02:38.860876+05:30	image-10.png
+d858caff-70f4-419e-b5d8-585dfb06e2ef	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	f	31	13	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/unlabelled/image-9.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-07 19:05:53.169537+05:30	image-9.jpg
+870b5e49-6d3f-4f8a-bee1-b8bcb117dcd1	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	f	30	9	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/unlabelled/image-7.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-7.jpg
+563d1aa0-2f57-4bac-9488-2cb85cc481d8	1	fc84183b-e344-4d14-9ee8-26938292e1e8	f	0	0	file://fc84183b-e344-4d14-9ee8-26938292e1e8_space2/labelled/image-1.jpg	\N	f	2023-03-09 13:48:23.156159+05:30	2023-03-09 13:48:23.156159+05:30	image-1.jpg
+17b449ff-85a8-4c3c-926b-dfecc2d57984	1	fc84183b-e344-4d14-9ee8-26938292e1e8	f	0	0	file://fc84183b-e344-4d14-9ee8-26938292e1e8_space2/labelled/space-1.jpg	4892	f	2023-03-09 14:05:24.945223+05:30	2023-03-09 14:05:24.945223+05:30	space-1.jpg
+bb798e7b-06a7-406d-bbae-8f8deddb3a18	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	f	26	8	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/unlabelled/image-8.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-07 19:06:18.649186+05:30	image-8.jpg
+391509e8-6e4c-497e-8281-0c60aedcb740	1	fc84183b-e344-4d14-9ee8-26938292e1e8	t	0	0	file://fc84183b-e344-4d14-9ee8-26938292e1e8_space2/labelled/space-1.jpg	4892	t	2023-03-09 14:05:38.284197+05:30	2023-03-09 14:05:38.284197+05:30	space-1.jpg
+54353b9e-011f-4e39-b569-6d6606cca21a	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	f	30	14	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/unlabelled/image-6.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-07 19:06:18.649186+05:30	image-6.jpg
+133b970e-a9d5-4d93-a406-16dbed10c50b	1	fc84183b-e344-4d14-9ee8-26938292e1e8	t	0	0	file://fc84183b-e344-4d14-9ee8-26938292e1e8_space2/labelled/image-9.jpg	9608	t	2023-03-09 14:17:54.45938+05:30	2023-03-09 14:17:54.45938+05:30	image-9.jpg
+473497ab-f7fd-423d-9528-d0d3f0556fa4	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	f	25	11	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/unlabelled/image-12.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-07 19:06:18.649186+05:30	image-12.jpg
+b2df19de-b7ee-43b2-aa8d-9e45c4988506	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	f	34	12	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/unlabelled/image-7.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-07 19:06:18.649186+05:30	image-7.jpg
+b7aa3eb5-f61d-49b8-9e91-c67bba912fba	1	fc84183b-e344-4d14-9ee8-26938292e1e8	t	0	0	file://fc84183b-e344-4d14-9ee8-26938292e1e8_space2/labelled/image-12.jpg	9659	t	2023-03-09 14:17:54.45938+05:30	2023-03-09 14:17:54.45938+05:30	image-12.jpg
+7f040352-078a-4538-82d1-c78c14a1bda3	1	fc84183b-e344-4d14-9ee8-26938292e1e8	t	0	0	file://fc84183b-e344-4d14-9ee8-26938292e1e8_space2/labelled/image-0.jpg	\N	t	2023-03-09 13:31:04.548184+05:30	2023-03-09 13:31:04.548184+05:30	image-0.jpg
+a55ac320-14c2-4cad-b29c-5e0d3200cd8a	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	f	28	14	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/unlabelled/image-10.jpg	\N	t	2023-03-05 12:16:41.172519+05:30	2023-03-07 19:06:02.167243+05:30	image-10.jpg
+72d54dba-fb36-4d25-8e1b-0792c1fe9e2c	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	f	27	18	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/unlabelled/image-9.jpg	\N	t	2023-03-05 12:10:45.717522+05:30	2023-03-05 12:10:45.717522+05:30	image-9.jpg
+74e26f8e-01e2-4a58-b7cc-06e853926a43	1	fc84183b-e344-4d14-9ee8-26938292e1e8	f	0	0	file://fc84183b-e344-4d14-9ee8-26938292e1e8_space2/labelled/image-0.jpg	\N	f	2023-03-09 13:31:31.048439+05:30	2023-03-09 13:31:31.048439+05:30	image-0.jpg
+ee0d9b71-7639-4b58-9676-dfdb80c9efd9	1	fc84183b-e344-4d14-9ee8-26938292e1e8	t	0	0	file://fc84183b-e344-4d14-9ee8-26938292e1e8_space2/labelled/image-9.jpg	9608	t	2023-03-09 14:18:15.196777+05:30	2023-03-09 14:18:15.196777+05:30	image-9.jpg
+c9930361-3897-43af-9e55-e7c81531ba06	1	fc84183b-e344-4d14-9ee8-26938292e1e8	t	0	0	file://fc84183b-e344-4d14-9ee8-26938292e1e8_space2/labelled/image-12.jpg	9659	t	2023-03-09 14:18:15.196777+05:30	2023-03-09 14:18:15.196777+05:30	image-12.jpg
+20465bc0-7c37-4ec7-9dc6-e83b8b500776	1	fc84183b-e344-4d14-9ee8-26938292e1e8	f	0	0	file://fc84183b-e344-4d14-9ee8-26938292e1e8_space2/labelled/image-9.jpg	9608	f	2023-03-09 14:18:23.574552+05:30	2023-03-09 14:18:23.574552+05:30	image-9.jpg
+bc81173f-bfb4-4c5b-83ce-216065d205fa	1	fc84183b-e344-4d14-9ee8-26938292e1e8	f	0	0	file://fc84183b-e344-4d14-9ee8-26938292e1e8_space2/labelled/image-12.jpg	9659	f	2023-03-09 14:18:23.574552+05:30	2023-03-09 14:18:23.574552+05:30	image-12.jpg
+0b75c327-52fe-41ad-9ee3-460755d62411	1	fc84183b-e344-4d14-9ee8-26938292e1e8	f	0	0	file://fc84183b-e344-4d14-9ee8-26938292e1e8_space2/labelled/image-3.jpg	6993	f	2023-03-09 14:19:11.313496+05:30	2023-03-09 14:19:11.313496+05:30	image-3.jpg
+5bf03eb8-d6d4-4e17-beee-e584d8558d83	1	fc84183b-e344-4d14-9ee8-26938292e1e8	t	0	0	file://fc84183b-e344-4d14-9ee8-26938292e1e8_space2/labelled/image-3.jpg	6993	t	2023-03-09 14:19:22.278801+05:30	2023-03-09 14:19:22.278801+05:30	image-3.jpg
+a5742082-3561-4696-a4dd-ea7d43c7c2d4	1	fc84183b-e344-4d14-9ee8-26938292e1e8	t	0	0	file://fc84183b-e344-4d14-9ee8-26938292e1e8_space2/labelled/image-1.jpg	14674	t	2023-03-09 14:19:52.878079+05:30	2023-03-09 14:19:52.878079+05:30	image-1.jpg
+a3908d39-67fa-4d42-b597-a5f680bdc681	1	fc84183b-e344-4d14-9ee8-26938292e1e8	t	0	0	file://fc84183b-e344-4d14-9ee8-26938292e1e8_space2/labelled/image-6.jpg	9644	t	2023-03-09 14:19:52.878079+05:30	2023-03-09 14:19:52.878079+05:30	image-6.jpg
+78591c63-0a08-4198-9389-ad9c421fe5ad	1	030e63f3-58b6-4255-98a8-77852bfcb531	t	0	0	file://030e63f3-58b6-4255-98a8-77852bfcb531_space2/labelled/dodeca.jpeg	669665	f	2023-03-10 01:27:03.372423+05:30	2023-03-10 01:27:03.372423+05:30	dodeca.jpeg
+6042a500-b324-479f-aa2b-b8caeeb46328	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	t	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/labelled/Triangle_Spiral.jpeg	399700	f	2023-03-10 01:28:16.582506+05:30	2023-03-10 01:28:16.582506+05:30	Triangle_Spiral.jpeg
+58d4c710-e099-4a78-a31e-4e332366e7bb	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	t	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/Bootes.jpeg	391727	f	2023-03-10 01:40:30.440992+05:30	2023-03-10 01:40:30.440992+05:30	Bootes.jpeg
+91825f67-1408-4944-914a-79faa2922696	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	t	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/Bootes.jpeg	391727	f	2023-03-10 01:40:46.270694+05:30	2023-03-10 01:40:46.270694+05:30	Bootes.jpeg
+579ba58e-129a-4c13-a992-a423c3d75ecf	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	t	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/dodeca.jpeg	669665	f	2023-03-10 01:40:46.270694+05:30	2023-03-10 01:40:46.270694+05:30	dodeca.jpeg
+d4f23095-89d4-44d4-b5fa-5af68ef81645	1	f872702d-b67f-4b5f-89af-b7264a89bfa8	t	0	0	file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/favicon.png	488	f	2023-03-10 01:40:46.270694+05:30	2023-03-10 01:40:46.270694+05:30	favicon.png
+51e25dca-a84d-41ea-bee6-1e40a015d66f	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	t	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/labelled/Hexa.jpeg	256025	f	2023-03-10 01:46:31.65559+05:30	2023-03-10 01:46:31.65559+05:30	Hexa.jpeg
+1eda40db-9cfd-457b-9634-815c79f6b206	1	cf6d40a6-2715-4999-99c0-44b1dfba6be9	f	0	0	file://cf6d40a6-2715-4999-99c0-44b1dfba6be9_bicycle/labelled/Triangle_Spiral.jpeg	399700	f	2023-03-10 01:46:41.783192+05:30	2023-03-10 01:46:41.783192+05:30	Triangle_Spiral.jpeg
+cf73214c-bd1e-42ba-a8f5-18e33246aee9	11	8e56a166-fa0a-4406-b738-4da07b34913f	f	0	0	file://8e56a166-fa0a-4406-b738-4da07b34913f_bus/labelled/testing.jpeg	42835	f	2023-03-11 12:29:28.352296+05:30	2023-03-11 12:29:28.352296+05:30	testing.jpeg
+7666b0a4-81c1-4eb4-98be-0a05bace727c	11	8e56a166-fa0a-4406-b738-4da07b34913f	f	0	0	file://8e56a166-fa0a-4406-b738-4da07b34913f_bus/labelled/testing.jpeg	42835	f	2023-03-11 12:29:50.728893+05:30	2023-03-11 12:29:50.728893+05:30	testing.jpeg
+\.
+
+
+--
+-- TOC entry 3681 (class 0 OID 16564)
+-- Dependencies: 220
+-- Data for Name: number_of_images; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.number_of_images (count) FROM stdin;
+1
+\.
+
+
+--
+-- TOC entry 3683 (class 0 OID 16568)
+-- Dependencies: 222
+-- Data for Name: project_status; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.project_status (id, status) FROM stdin;
+1	Not Started
+2	Ongoing
+3	Completed
+\.
+
+
+--
+-- TOC entry 3674 (class 0 OID 16407)
+-- Dependencies: 213
+-- Data for Name: projects; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.projects (id, user_id, name, label_value, active, created_at, updated_at, threshold, expiry, description, tokens_minted, tokens_remaining, token_multiplier, status) FROM stdin;
+01ab1838-c6a7-440d-888a-5daf63da7b1a	1	car	car	f	2023-03-07 18:52:17.435916+05:30	2023-03-07 18:52:17.435916+05:30	80	2023-03-18 01:00:00+05:30	\N	0	0	10	1
+bb58759a-91c9-443c-b268-6beb4e459f88	1	bike	bike	f	2023-03-07 18:53:19.285072+05:30	2023-03-07 18:53:19.285072+05:30	80	2023-03-18 01:00:00+05:30	\N	0	0	10	1
+6b85d6d1-9dc5-4aeb-80de-6fac30264d46	1	space	space	f	2023-03-07 19:36:28.087735+05:30	2023-03-07 19:36:28.087735+05:30	75	2023-03-18 00:00:00+05:30	\N	0	0	10	1
+fc84183b-e344-4d14-9ee8-26938292e1e8	1	space1	space2	f	2023-03-07 19:38:22.924265+05:30	2023-03-07 19:38:22.924265+05:30	75	2023-03-18 00:00:00+05:30	\N	0	0	10	1
+030e63f3-58b6-4255-98a8-77852bfcb531	1	space1	space2	f	2023-03-07 19:40:21.103723+05:30	2023-03-07 19:40:21.103723+05:30	75	2023-03-18 00:00:00+05:30	\N	0	0	10	1
+da9ceac9-8967-4cf8-a574-fa23f10fc202	1	space10	space20	f	2023-03-07 18:53:44.919415+05:30	2023-03-07 20:40:02.127196+05:30	75	2023-03-18 00:00:00+05:30	\N	0	0	10	1
+8e56a166-fa0a-4406-b738-4da07b34913f	11	ABC	bus	f	2023-03-11 12:26:50.573275+05:30	2023-03-11 12:26:50.573275+05:30	88	2023-03-22 00:00:00+05:30	\N	0	0	10	1
+f872702d-b67f-4b5f-89af-b7264a89bfa8	1	bus	bus	t	2023-03-05 11:45:55.476424+05:30	2023-03-11 16:21:03.923881+05:30	84	\N	\N	70	70	10	2
+cf6d40a6-2715-4999-99c0-44b1dfba6be9	1	bicycle	bicycle	t	2023-03-05 11:53:41.855287+05:30	2023-03-05 11:53:41.855287+05:30	85	\N	\N	0	0	10	2
+04b05ed0-d8e2-4303-ab94-a5b56c3d1e8d	1	humpty	dummy	f	2023-03-09 00:09:26.201954+05:30	2023-03-11 01:06:40.525387+05:30	90	2023-04-08 00:00:00+05:30	\N	0	0	10	3
+\.
+
+
+--
+-- TOC entry 3680 (class 0 OID 16457)
+-- Dependencies: 219
+-- Data for Name: user_type; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.user_type (id, description, created_at, updated_at) FROM stdin;
+1	Admin	2023-03-04 20:14:16.998408+05:30	2023-03-04 20:14:16.998408+05:30
+2	User	2023-03-04 20:31:33.020414+05:30	2023-03-04 20:31:33.020414+05:30
+\.
+
+
+--
+-- TOC entry 3672 (class 0 OID 16394)
+-- Dependencies: 211
+-- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.users (id, user_type_id, group_id, name, api_key, active, created_at, updated_at, wallet_id) FROM stdin;
+1	2	1	pranav_op	920310e1-eb98-4cbf-bfa1-97c90e8baf44	t	2023-03-05 11:35:19.303184+05:30	2023-03-05 11:35:19.303184+05:30	GrZMZse68SN8kEpFQwNRDHJqdXxbsa8NgjwFeoBkQqr4
+2	2	1	roshan_op	b8a09ee5-3136-4123-ad69-fec102ebe66d	t	2023-03-05 11:35:43.9687+05:30	2023-03-05 11:35:43.9687+05:30	GrZMZse68SN8kEpFQwNRDHJqdXxbsa8NgjwFeoBkQqr5
+3	2	1	aditya_op	fe09270c-d902-4915-8282-53397f2953de	t	2023-03-05 11:35:56.082811+05:30	2023-03-05 11:35:56.082811+05:30	GrZMZse68SN8kEpFQwNRDHJqdXxbsa8NgjwFeoBkQqr5
+4	2	1	archish_op	404fd64c-f61b-4bbc-82bb-ac5a8b5c5a58	t	2023-03-05 11:36:08.387204+05:30	2023-03-05 11:36:08.387204+05:30	GrZMZse68SN8kEpFQwNRDHJqdXxbsa8NgjwFeoBkQqr5
+6	2	2	\N	7de0a9e1-2586-4ca4-9fea-4a05edfe1b2a	t	2023-03-11 09:37:51.683073+05:30	2023-03-11 09:37:51.683073+05:30	sample_wallet_id
+7	2	2	\N	97fb8f01-a7ab-429d-bf94-261c5dc3752a	t	2023-03-11 09:40:05.058161+05:30	2023-03-11 09:40:05.058161+05:30	sample_wallet_id1
+8	2	2	\N	74fdaf6d-30f7-4933-a83b-d2b8793be465	t	2023-03-11 10:04:33.377561+05:30	2023-03-11 10:04:33.377561+05:30	sample_wallet_id2
+9	2	2	\N	08b36656-b362-40e9-bf0b-337c9fdb33f4	t	2023-03-11 11:46:44.097417+05:30	2023-03-11 11:46:44.097417+05:30	sample_wallet_id3
+10	2	2	\N	5d5e1920-f0de-418c-b6f1-d17c69ac1953	t	2023-03-11 11:47:32.894009+05:30	2023-03-11 11:47:32.894009+05:30	sample_wallet_id4
+11	2	2	\N	435c2f37-2ca4-4c2f-bebe-645b33f14a83	t	2023-03-11 11:49:34.434657+05:30	2023-03-11 11:49:34.434657+05:30	ChGC48zhrg6fNZUSKbmLWwJXP1VcX7eqxp4NmTipFiQA
+\.
+
+
+--
+-- TOC entry 3696 (class 0 OID 0)
+-- Dependencies: 216
+-- Name: api_keys_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.api_keys_id_seq', 1, false);
+
+
+--
+-- TOC entry 3697 (class 0 OID 0)
+-- Dependencies: 214
+-- Name: images_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.images_id_seq', 1, false);
+
+
+--
+-- TOC entry 3698 (class 0 OID 0)
+-- Dependencies: 221
+-- Name: project_status_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.project_status_id_seq', 3, true);
+
+
+--
+-- TOC entry 3699 (class 0 OID 0)
+-- Dependencies: 212
+-- Name: projects_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.projects_id_seq', 1, false);
+
+
+--
+-- TOC entry 3700 (class 0 OID 0)
+-- Dependencies: 218
+-- Name: user_type_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.user_type_id_seq', 1, false);
+
+
+--
+-- TOC entry 3701 (class 0 OID 0)
+-- Dependencies: 210
+-- Name: users_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.users_id_seq', 11, true);
+
+
+--
+-- TOC entry 3521 (class 2606 OID 16482)
+-- Name: api_keys api_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.api_keys
+    ADD CONSTRAINT api_keys_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 3519 (class 2606 OID 16490)
+-- Name: images images_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.images
+    ADD CONSTRAINT images_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 3525 (class 2606 OID 16575)
+-- Name: project_status project_status_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_status
+    ADD CONSTRAINT project_status_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 3517 (class 2606 OID 16502)
+-- Name: projects projects_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 3523 (class 2606 OID 16464)
+-- Name: user_type user_type_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_type
+    ADD CONSTRAINT user_type_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 3515 (class 2606 OID 16402)
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 3529 (class 2606 OID 16518)
+-- Name: images project_id; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.images
+    ADD CONSTRAINT project_id FOREIGN KEY (project_id) REFERENCES public.projects(id) NOT VALID;
+
+
+--
+-- TOC entry 3527 (class 2606 OID 16577)
+-- Name: projects project_status; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT project_status FOREIGN KEY (status) REFERENCES public.project_status(id) NOT VALID;
+
+
+--
+-- TOC entry 3528 (class 2606 OID 16416)
+-- Name: projects user_id; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT user_id FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- TOC entry 3530 (class 2606 OID 16431)
+-- Name: images user_id; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.images
+    ADD CONSTRAINT user_id FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- TOC entry 3531 (class 2606 OID 16451)
+-- Name: api_keys user_id; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.api_keys
+    ADD CONSTRAINT user_id FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- TOC entry 3526 (class 2606 OID 16465)
+-- Name: users user_type_id; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT user_type_id FOREIGN KEY (user_type_id) REFERENCES public.user_type(id) NOT VALID;
+
+
+--
+-- TOC entry 3690 (class 0 OID 0)
+-- Dependencies: 5
+-- Name: SCHEMA public; Type: ACL; Schema: -; Owner: pranav
+--
+
+REVOKE USAGE ON SCHEMA public FROM PUBLIC;
+GRANT ALL ON SCHEMA public TO PUBLIC;
+
+
+-- Completed on 2023-03-11 19:06:21 IST
+
+--
+-- PostgreSQL database dump complete
+--
+
