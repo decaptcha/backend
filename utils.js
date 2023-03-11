@@ -194,18 +194,19 @@ const validateProject = (project, isUpdateObject = false) => {
   if (isUpdateObject && project.active.toString().trim() === "")
     return [false, "Project Threshold empty"];
 
-  if (!project.expiry) return [false, "Project Expiry undefined"];
-  if (project.expiry.toString().trim() === "")
-    return [false, "Project Expiry empty"];
-  try {
-    const date = new Date(project.expiry);
-    if (date == "Invalid Date")
-      return [false, "Project Expiry is not a valid date"];
-    if (date < new Date())
-      return [false, "Project Expiry cannot be less than current date"];
-  } catch (e) {
-    return [false, "Project Expiry is not a valid date"];
-  }
+  // Not doing this
+  // if (!project.expiry) return [false, "Project Expiry undefined"];
+  // if (project.expiry.toString().trim() === "")
+  //   return [false, "Project Expiry empty"];
+  // try {
+  //   const date = new Date(project.expiry);
+  //   if (date == "Invalid Date")
+  //     return [false, "Project Expiry is not a valid date"];
+  //   if (date < new Date())
+  //     return [false, "Project Expiry cannot be less than current date"];
+  // } catch (e) {
+  //   return [false, "Project Expiry is not a valid date"];
+  // }
 
   return [true, "Valid Project Object"];
 };
