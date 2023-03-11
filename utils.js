@@ -10,6 +10,7 @@ const {
   PRIVATE_KEY,
   ENC_ALGO,
   INITIALIZATION_VECTOR,
+  PROJECT_STATUS,
 } = require("./constants");
 
 /**
@@ -77,7 +78,7 @@ const getImgURL = (url) => {
       // file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/image-1.jpg
       url = url.replace(
         "file://",
-        `http://localhost:${server_port}/image/?image_path=`
+        `http://1f85-14-143-59-170.in.ngrok.io/image/?image_path=`
       );
     } else if (url.startsWith("s3://")) {
       // TODO: handle s3 urls here
@@ -192,7 +193,7 @@ const validateProject = (project, isUpdateObject = false) => {
     return [false, "Project Threshold empty"];
 
   if (isUpdateObject && project.active.toString().trim() === "")
-    return [false, "Project Threshold empty"];
+    return [false, "Project Active empty"];
 
   // Not doing this
   // if (!project.expiry) return [false, "Project Expiry undefined"];
@@ -211,6 +212,25 @@ const validateProject = (project, isUpdateObject = false) => {
   return [true, "Valid Project Object"];
 };
 
+/**
+ * Sets the project status for frontend
+ * @param {object} project
+ * @returns object
+ */
+const setProjectStatusForFrontend = (project) => {
+  if (project.status === PROJECT_STATUS.NOT_STARTED) {
+    project.active = false;
+    project.is_completed = false;
+  } else if (project.status === PROJECT_STATUS.ONGOING) {
+    project.active = true;
+    project.is_completed = false;
+  } else if (project.status === PROJECT_STATUS.COMPLETED) {
+    project.active = false;
+    project.is_completed = true;
+  }
+  return project;
+};
+
 module.exports = {
   getAndPrintErrorString,
   encryptValue,
@@ -223,4 +243,5 @@ module.exports = {
   shuffleArray,
   validateDBResponse,
   validateProject,
+  setProjectStatusForFrontend,
 };

@@ -29,6 +29,7 @@ const {
   ERROR_WHILE_MOVING_IMG_TO_DISK,
   SUCCESS_RESPONSE,
   ERROR_RESPONSE,
+  PROJECT_STARTED_OR_COMPLETED,
 } = require("./constants");
 
 const app = express();
@@ -325,6 +326,14 @@ app.get("/projects", (req, res) => {
                   if (img.url) img.url = utils.getImgURL(img.url);
                 }
               }
+
+              resp.project = utils.setProjectStatusForFrontend(resp.project);
+            }
+
+            if (resp && resp.projects && resp.projects.length > 0) {
+              for (let project of resp.projects) {
+                project = utils.setProjectStatusForFrontend(project);
+              }
             }
 
             res.status(SUCCESS_HTTP_CODE).json({
@@ -550,6 +559,9 @@ app.put("/upload_images", (req, res) => {
             } else if (dbResponse["error"] === PROJECT_NOT_PRESENT) {
               code = FORBIDDEN_ERROR_CODE;
               throw PROJECT_NOT_PRESENT;
+            } else if (dbResponse["error"] === PROJECT_STARTED_OR_COMPLETED) {
+              code = BAD_REQ_ERROR_CODE;
+              throw PROJECT_STARTED_OR_COMPLETED;
             }
 
             let resp = results.rows[0][DB_FUNCTIONS.ADD_IMAGES.FUNCTION_NAME];

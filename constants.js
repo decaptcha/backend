@@ -25,6 +25,7 @@ const PROJECT_NOT_PRESENT = "Project not present";
 const USER_NOT_PRESENT = "User not present";
 const IMG_NOT_PRESENT = "Image not present";
 const REQUEST_BODY_NOT_PRESENT = "Request body not present";
+const PROJECT_STARTED_OR_COMPLETED = "Project has been started or completed";
 const ERROR_WHILE_MOVING_IMG_TO_DISK =
   "Error Occurred while moving image to disk";
 const SUCCESS_RESPONSE = {
@@ -38,6 +39,11 @@ const ERROR_RESPONSE = (code = SERVER_ERROR_CODE) => {
     statusMessage: "Error",
     resp: {},
   };
+};
+const PROJECT_STATUS = {
+  NOT_STARTED: "Not Started",
+  ONGOING: "Ongoing",
+  COMPLETED: "Completed",
 };
 const PRIVATE_KEY = "32g!kF9RF7T8m1RS57OjgTUlgPsJHegi";
 const ENC_ALGO = "aes256";
@@ -60,10 +66,12 @@ module.exports = {
   USER_NOT_PRESENT,
   IMG_NOT_PRESENT,
   REQUEST_BODY_NOT_PRESENT,
+  PROJECT_STARTED_OR_COMPLETED,
   ERROR_WHILE_MOVING_IMG_TO_DISK,
   SUCCESS_RESPONSE,
   ERROR_RESPONSE,
   PRIVATE_KEY,
   ENC_ALGO,
   INITIALIZATION_VECTOR,
+  PROJECT_STATUS,
 };
