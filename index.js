@@ -77,15 +77,15 @@ app.get("/captcha", (req, res) => {
       const api_key = req.query.api_key;
       const cryptoStuff = async () => {
         try {
-          // Query the image count and then based on that create number of images
-          const imageCount = 100;
+          const amountToBeTransferred = '' // TODO: get the amount to be transferred
           const localWallet = getLocalWallet();
-          const mint = await createNewMint(localWallet);
-          const signature = await mintToWallet(localWallet, mint, imageCount);
+          const receiverWalletAddress = ''; // TODO: query receiver's wallet address
+          const receiverWallet = new PublicKey(receiverWalletAddress);
+          const mint = new PublicKey('5H2hFWuXa5yrB7CMLhhJmAzAMY714v2owG1LEsZeJxEU') // TODO: query the token mint address from the project table
+          const signature = await transferToken(localWallet, receiverWallet, mint, amountToBeTransferred);
           return {
             signature: signature,
-            message: `Created mint with txid ${signature}`,
-            mint: mint.toString(),
+            message: `Transferred tokens with txid ${signature}`,
           };
         } catch (error) {
           throw new Error({
@@ -481,15 +481,14 @@ app.post("/update_project", (req, res) => {
 
       const cryptoStuff = async () => {
         try {
-          const amountToBeTransferred = '' // TODO: get the amount to be transferred
+          const imageCount = 100; // Query the image count and then based on that create number of images
           const localWallet = getLocalWallet();
-          const receiverWalletAddress = ''; // TODO: query receiver's wallet address
-          const receiverWallet = new PublicKey(receiverWalletAddress);
-          const mint = new PublicKey('5H2hFWuXa5yrB7CMLhhJmAzAMY714v2owG1LEsZeJxEU') // TODO: query the token mint address from the project table
-          const signature = await transferToken(localWallet, receiverWallet, mint, amountToBeTransferred);
+          const mint = await createNewMint(localWallet);
+          const signature = await mintToWallet(localWallet, mint, imageCount);
           return {
             signature: signature,
-            message: `Transferred tokens with txid ${signature}`,
+            message: `Created mint with txid ${signature}`,
+            mint: mint.toString(),
           };
         } catch (error) {
           throw new Error({

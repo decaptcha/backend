@@ -110,7 +110,7 @@ const transferToken = async (fromWallet, toWallet, mint, amount) => {
     connection,
     fromWallet,
     mint,
-    toWallet.publicKey
+    toWallet
   );
   const tokenAmount = amount * Math.pow(10, DECIMAL_POINT);
   const signature = await transfer(
