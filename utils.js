@@ -6,6 +6,7 @@ const path = require("path");
 const {
   storageRootFolder,
   server_port,
+  INCORRECT_RESULT_FROM_DB,
   DB_CONFIG,
   PRIVATE_KEY,
   ENC_ALGO,
@@ -78,7 +79,7 @@ const getImgURL = (url) => {
       // file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/image-1.jpg
       url = url.replace(
         "file://",
-        `http://1f85-14-143-59-170.in.ngrok.io/image/?image_path=`
+        `http://e136-183-87-63-158.in.ngrok.io/image/?image_path=`
       );
     } else if (url.startsWith("s3://")) {
       // TODO: handle s3 urls here
@@ -231,6 +232,29 @@ const setProjectStatusForFrontend = (project) => {
   return project;
 };
 
+/**
+ * Returns simple
+ * @param {Pool} pool
+ * @param {string} functionName
+ * @param {string} params
+ * @returns Promise
+ */
+const getValueFromDB = (pool, functionName, params = []) => {
+  return new Promise((resolve, reject) => {
+    pool.query(functionName, params, (err, results) => {
+      if (err) {
+        reject(err);
+      }
+
+      if (validateDBResponse(results, functionName)) {
+        resolve(results.rows[0][functionName]);
+      } else {
+        reject(INCORRECT_RESULT_FROM_DB);
+      }
+    });
+  });
+};
+
 module.exports = {
   getAndPrintErrorString,
   encryptValue,
@@ -244,4 +268,5 @@ module.exports = {
   validateDBResponse,
   validateProject,
   setProjectStatusForFrontend,
+  getValueFromDB,
 };

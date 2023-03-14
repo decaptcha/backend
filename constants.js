@@ -49,6 +49,8 @@ const PRIVATE_KEY = "32g!kF9RF7T8m1RS57OjgTUlgPsJHegi";
 const ENC_ALGO = "aes256";
 const INITIALIZATION_VECTOR = crypto.randomBytes(16);
 
+const DECAPTCHA_WALLET_ID = "AAPR";
+
 module.exports = {
   server_port,
   DB_CONFIG,
@@ -74,4 +76,5 @@ module.exports = {
   ENC_ALGO,
   INITIALIZATION_VECTOR,
   PROJECT_STATUS,
+  DECAPTCHA_WALLET_ID
 };
