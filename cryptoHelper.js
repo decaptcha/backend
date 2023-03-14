@@ -98,6 +98,7 @@ const mintToWallet = async (wallet, mint, amount) => {
 };
 
 const transferToken = async (fromWallet, toWallet, mint, amount) => {
+  mint = new PublicKey(mint);
   // We fund the creation of token account if not present in toWallet
   const connection = getConnection();
   const fromTokenAccount = await getOrCreateAssociatedTokenAccount(
@@ -162,4 +163,3 @@ module.exports = {
   printTokenAccountDetails,
   getTokenAmountDetails,
 };
-

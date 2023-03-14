@@ -233,15 +233,16 @@ const setProjectStatusForFrontend = (project) => {
 };
 
 /**
- * Returns simple
+ * Returns simple values from DB
  * @param {Pool} pool
+ * @param {string} query
  * @param {string} functionName
  * @param {string} params
  * @returns Promise
  */
-const getValueFromDB = (pool, functionName, params = []) => {
+const getValueFromDB = (pool, query, functionName, params = []) => {
   return new Promise((resolve, reject) => {
-    pool.query(functionName, params, (err, results) => {
+    pool.query(query, params, (err, results) => {
       if (err) {
         reject(err);
       }
