@@ -240,28 +240,26 @@ app.post("/captcha", async (req, res) => {
 
       console.log(unlabelledImages);
 
-      console.log(`here 1`);
       const receiverWalletAddress = await utils.getValueFromDB(
         pool,
         DB_FUNCTIONS.GET_WALLET_ID_FROM_API_KEY.QUERY,
         DB_FUNCTIONS.GET_WALLET_ID_FROM_API_KEY.FUNCTION_NAME,
         [api_key.toString()]
       );
-      console.log(`here 2 ${receiverWalletAddress}`);
+      console.log(`receiverWalletAddress ${receiverWalletAddress}`);
       let mint = "";
       if (
         unlabelledImages &&
         unlabelledImages.length > 0 &&
         unlabelledImages[0].id
       ) {
-        console.log(`here 3`);
         mint = await utils.getValueFromDB(
           pool,
           DB_FUNCTIONS.GET_PROJECT_MINT_FROM_IMAGE_ID.QUERY,
           DB_FUNCTIONS.GET_PROJECT_MINT_FROM_IMAGE_ID.FUNCTION_NAME,
           [unlabelledImages[0].id]
         );
-        console.log(`here 4 ${mint}`);
+        console.log(`mint ${mint}`);
       }
 
       // Update data in DB for unlabelled images
