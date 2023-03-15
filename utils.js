@@ -79,7 +79,7 @@ const getImgURL = (url) => {
       // file://f872702d-b67f-4b5f-89af-b7264a89bfa8_bus/labelled/image-1.jpg
       url = url.replace(
         "file://",
-        `http://e136-183-87-63-158.in.ngrok.io/image/?image_path=`
+        `https://c4e8-183-87-63-158.in.ngrok.io/image/?image_path=`
       );
     } else if (url.startsWith("s3://")) {
       // TODO: handle s3 urls here
